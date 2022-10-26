@@ -1,3 +1,7 @@
+# This file defines device side functions and fit evaluation kernels,
+# which allows evaluating multiple programs simultaneously.
+
+
 import math
 from numba import cuda
 import fset
@@ -7,11 +11,53 @@ MAX_PROGRAM_LEN = 200
 MAX_TOP = 10
 
 
+# -The device side dataset is structured as follows:
+#                [0 0 0]  [1 1 1]  [2 2 2]                   [0 0 0 0 0 0 0 0 0]
+#     raw image: [0 0 0]  [1 1 1]  [2 2 2] ... => reshape => [1 1 1 1 1 1 1 1 1] => transpose =>
+#                [0 0 0]  [1 1 1]  [2 2 2]                   [2 2 2 2 2 2 2 2 2]
+#
+#              [<---- data_size ---->]
+#              [0 1 2 3 4 5 6 7 8 9 .]
+#              [0 1 2 3 4 5 6 7 8 9 .]
+#              [0 1 2 3 4 5 6 7 8 9 .]
+#              [0 1 2 3 4 5 6 7 8 9 .]
+#     dataset: [0 1 2 3 4 5 6 7 8 9 .]
+#              [0 1 2 3 4 5 6 7 8 9 .]
+#              [0 1 2 3 4 5 6 7 8 9 .]
+#              [0 1 2 3 4 5 6 7 8 9 .]
+#              [0 1 2 3 4 5 6 7 8 9 .]
+
+
 @cuda.jit(device=True, inline=True)
 def _dataset_value(dataset, data_size, im_w, i, j):
     pixel_row = i * im_w + j
     pixel_col = cuda.blockIdx.x * cuda.blockDim.x + cuda.threadIdx.x
     return dataset[pixel_row * data_size + pixel_col]
+
+
+# -Also a buffer for storing temp conv value is allocated, which is structured as follows:
+#   The shape of stack is the same as the conv buffer.
+#                  [<---- data_size ---->]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#     program 0 => [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [=====================]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#     program 1 => [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [0 1 2 3 4 5 6 7 8 9 .]
+#                  [.....................]
 
 
 @cuda.jit(device=True, inline=True)
@@ -38,6 +84,18 @@ def _pixel_conv_buffer_index(data_size, im_h, im_w, i, j) -> int:
 @cuda.jit(device=True, inline=True)
 def _pixel_value_in_conv_buffer(buffer, data_size, im_h, im_w, i, j):
     return buffer[_pixel_conv_buffer_index(data_size, im_h, im_w, i, j)]
+
+
+# -The buffer to store the std value is structured as follows:
+#     top=0 => [000000000000000000000]
+#              [111111111111111111111]
+#              [222222222222222222222]
+#              [-------MAX TOP-------]
+#     top=1 => [000000000000000000000]
+#              [111111111111111111111]
+#              [222222222222222222222]
+#              [-------MAX TOP-------]
+#              [.....................]
 
 
 @cuda.jit(device=True, inline=True)
@@ -340,6 +398,26 @@ def lbp(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
     cuda.syncthreads()
 
 
+# -A buffer for Histogram based functions is allocated, which is structured as follows:
+#                  [<---- data_size ---->]
+#                  [0 0 0 0 0 0 0 0 0 0 .]
+#                  [1 1 1 1 1 1 1 1 1 1 .]
+#                  [2 2 2 2 2 2 2 2 2 2 .]
+#                  [3 3 3 3 3 3 3 3 3 3 .]
+#     program 0 => [4 4 4 4 4 4 4 4 4 4 .]
+#                  [5 5 5 5 5 5 5 5 5 5 .]
+#                  [.....................]
+#                  [---------256---------]
+#                  [0 0 0 0 0 0 0 0 0 0 .]
+#                  [1 1 1 1 1 1 1 1 1 1 .]
+#                  [2 2 2 2 2 2 2 2 2 2 .]
+#                  [3 3 3 3 3 3 3 3 3 3 .]
+#     program 0 => [4 4 4 4 4 4 4 4 4 4 .]
+#                  [5 5 5 5 5 5 5 5 5 5 .]
+#                  [.....................]
+#                  [---------256---------]
+
+
 @cuda.jit(device=True, inline=True)
 def _hist_buffer_index(data_size, value) -> int:
     program_no = cuda.blockIdx.y
@@ -396,11 +474,18 @@ def hist_eq(stack, data_size, im_h, im_w, rx, ry, rh, rw, hist_buffer):
     cuda.syncthreads()
 
 
+# -This kernel allows evaluating multiple programs in the same time.
+# Grid dims when launching this kernel: (int((DATA_SIZE - 1 + THREAD_PER_BLOCK) / THREAD_PER_BLOCK), POP_SIZE_TO_EVAL)
+# Block dims when launching this kernel: THREAD_PER_BLOCK
+
+
 @cuda.jit()
 def calc_pop_fit(name, rx, ry, rh, rw, plen, img_h, img_w, data_size, dataset, stack, conv_buffer, hist_buffer,
                  std_res):
     # the program that the thread is responsible for
     program_no = cuda.blockIdx.y
+
+    # top which point to the std_res
     top = 0
     reg_x, reg_y, reg_h, reg_w = 0, 0, 0, 0
 

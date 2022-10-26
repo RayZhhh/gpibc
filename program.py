@@ -156,14 +156,3 @@ class Program:
 
         self.prefix = ret
         self.get_depth_of_program()
-
-
-if __name__ == '__main__':
-    program1 = Program(32, 32, 4, 'full')
-    program2 = Program(32, 32, 4, 'full')
-    # print(program1)
-    print(program2)
-    # program1.crossover(program2)
-    # print(program1)
-    program2.hoist_mutation()
-    print(program2)

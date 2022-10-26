@@ -8,7 +8,6 @@ from fset import *
 
 
 terminal_set = [Region_S, Region_R]
-# inter_func_set = [Hist_Eq, Gau1, Lap, Sobel_X, Sobel_Y, LoG1, HOG]
 inter_func_set = [Hist_Eq, Gau1, Lap, Sobel_X, Sobel_Y, LoG1]
 
 
@@ -201,13 +200,3 @@ class TreeGenerator:
 
             tree_node.left = self._create_growth_tree(depth - 1, node.name)
             return tree_node
-
-
-if __name__ == '__main__':
-    # prefix = [Node(Sub), Node(G_Std), Node(Region_R), Node(G_Std), Node(Gau1), Node(Region_S)]
-    # print(get_depth_of_prefix(prefix))
-
-    # print(str(rand_terminal_node(32, 32)))
-
-    res = TreeGenerator(5, 32, 32).growth_init_tree()
-    print(res)
