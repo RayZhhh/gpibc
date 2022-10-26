@@ -68,43 +68,42 @@ class GPUProgramEvaluator:
 
 
 class GPUPopulationEvaluator:
-    def __init__(self, dataset, label, thread_per_block=64):
+    def __init__(self, dataset, label, eval_batch, thread_per_block=64):
         self.dataset = dataset
         self.label = label
         self.data_size = len(dataset)
         self.img_h = len(self.dataset[0])
         self.img_w = len(self.dataset[0][0])
+        self.eval_batch = eval_batch
         self.thread_per_block = thread_per_block
         self.max_top = MAX_TOP
         self.max_program_len = MAX_PROGRAM_LEN
         #
         self._ddataset = cuda.to_device(self.dataset.reshape(self.data_size, -1).T.reshape(1, -1).squeeze())
-        self._dstack = ...
-        self._dhist = ...
-        self._dres = ...
-        self._dconv_buffer = ...
-        self.population = ...
-        self.pop_size = ...
-
-    def _allocate_device_stack(self):
-        return cuda.device_array(self.data_size * self.img_h * self.img_w * self.pop_size, float)
-
-    def _allocate_device_conv_buffer(self):
-        return cuda.device_array(self.data_size * self.img_h * self.img_w * self.pop_size, float)
-
-    def _allocate_device_hist_buffer(self):
-        return cuda.device_array(self.data_size * (device_emp.MAX_PIXEL_VALUE + 1) * self.pop_size, float)
-
-    def _allocate_device_res_buffer(self):
-        return cuda.device_array(self.max_top * self.data_size * self.pop_size)
-
-    def fitness_evaluate(self, population: List[Program]):
-        self.population = population
-        self.pop_size = len(population)
         self._dstack = self._allocate_device_stack()
         self._dhist = self._allocate_device_hist_buffer()
         self._dres = self._allocate_device_res_buffer()
         self._dconv_buffer = self._allocate_device_conv_buffer()
+        self.population = ...
+        self.pop_size = ...
+
+    def _allocate_device_stack(self):
+        return cuda.device_array(self.data_size * self.img_h * self.img_w * self.eval_batch, float)
+
+    def _allocate_device_conv_buffer(self):
+        return cuda.device_array(self.data_size * self.img_h * self.img_w * self.eval_batch, float)
+
+    def _allocate_device_hist_buffer(self):
+        return cuda.device_array(self.data_size * (device_emp.MAX_PIXEL_VALUE + 1) * self.eval_batch, float)
+
+    def _allocate_device_res_buffer(self):
+        return cuda.device_array(self.max_top * self.data_size * self.eval_batch)
+
+    def fitness_evaluate(self, population: List[Program]):
+        self.population = population
+        self.pop_size = len(population)
+        if self.pop_size > self.eval_batch:
+            raise RuntimeError('Error: pop size > eval batch.')
 
         # allocate device side programs
         name = np.zeros((self.pop_size, self.max_program_len), int)
@@ -129,6 +128,7 @@ class GPUPopulationEvaluator:
         # copy to device
         name = cuda.to_device(name)
         rx, ry, rh, rw = cuda.to_device(rx), cuda.to_device(ry), cuda.to_device(rh), cuda.to_device(rw)
+        plen = cuda.to_device(plen)
 
         # launch kernel
         grid = (int((self.data_size - 1 + self.thread_per_block) / self.thread_per_block), self.pop_size)

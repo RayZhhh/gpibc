@@ -13,7 +13,7 @@ from evaluator import GPUProgramEvaluator, GPUPopulationEvaluator
 class BinaryClassifier:
     def __init__(self, dataset: np.ndarray, label: np.ndarray, population_size=500, init_method='ramped_half_and_half',
                  init_depth=(3, 6), max_program_depth=6, generations=50, elist_size=5, tournament_size=5,
-                 crossover_prob=0.6, mutation_prob=0.3, device='cuda', eval_method='program'):
+                 crossover_prob=0.6, mutation_prob=0.3, device='cuda', eval_method='program', eval_batch=100):
         """
         Args:
             dataset          : dataset
@@ -29,6 +29,7 @@ class BinaryClassifier:
             mutation_prob    : mutation probability
             device           : the device on which executes fitness evaluation
             eval_method      : 'program' or 'population', device will evaluate a program or a population simultaneously
+            eval_batch       : the number of program to evaluate simultaneously, valid when eval_method='population'
         """
         self.dataset = dataset
         self.label = label
@@ -50,6 +51,7 @@ class BinaryClassifier:
         self.mutation_prob = mutation_prob
         self.device = device
         self.eval_method = eval_method
+        self.eval_batch = eval_batch
 
         if device == 'cuda' and not numba.cuda.is_available():
             raise RuntimeError('Do not support CUDA on your device.')
@@ -58,7 +60,7 @@ class BinaryClassifier:
             if self.eval_method == 'program':
                 self.gpu_evaluator_program = GPUProgramEvaluator(self.dataset, self.label)
             elif self.eval_method == 'population':
-                self.gpu_evaluator_population = GPUPopulationEvaluator(self.dataset, self.label)
+                self.gpu_evaluator_population = GPUPopulationEvaluator(self.dataset, self.label, self.eval_batch)
             else:
                 raise RuntimeError('Error: eval_method must be \'program\' or \'population\'.')
 
@@ -120,7 +122,10 @@ class BinaryClassifier:
         self.gpu_evaluator_program.fitness_evaluate(program)
 
     def _fitness_evaluatrion_gpu_pop(self):
-        self.gpu_evaluator_population.fitness_evaluate(self.population)
+        for i in range(0, self.population_size, self.eval_batch):
+            last_pos = min(i + self.eval_batch, self.population_size)
+            # print(f'pos: {i}  last_pos: {last_pos}')
+            self.gpu_evaluator_population.fitness_evaluate(self.population[i: last_pos])
 
     def _update_generation_properties(self):
         self.best_program = self.population[0]
