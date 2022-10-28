@@ -18,12 +18,13 @@ class GPUPopulationEvaluator:
         self.thread_per_block = thread_per_block
         self.max_top = MAX_TOP
         self.max_program_len = MAX_PROGRAM_LEN
-        #
+        # device side arr
         self._ddataset = cuda.to_device(self.dataset.reshape(self.data_size, -1).T.reshape(1, -1).squeeze())
         self._dstack = self._allocate_device_stack()
         self._dhist = self._allocate_device_hist_buffer()
         self._dres = self._allocate_device_res_buffer()
         self._dconv_buffer = self._allocate_device_conv_buffer()
+        # population
         self.population = ...
         self.pop_size = ...
 
@@ -72,9 +73,8 @@ class GPUPopulationEvaluator:
 
         # launch kernel
         grid = (int((self.data_size - 1 + self.thread_per_block) / self.thread_per_block), self.pop_size)
-        calc_pop_fit[grid, self.thread_per_block](name, rx, ry, rh, rw, plen, self.img_h, self.img_w,
-                                                             self.data_size, self._ddataset, self._dstack,
-                                                             self._dconv_buffer, self._dhist, self._dres)
+        calc_pop_fit[grid, self.thread_per_block](name, rx, ry, rh, rw, plen, self.img_h, self.img_w, self.data_size,
+                                            self._ddataset, self._dstack, self._dconv_buffer, self._dhist, self._dres)
         cuda.synchronize()
 
         # get accuracy
