@@ -3,9 +3,8 @@ import time
 from PIL import Image
 import os
 
-import evaluator
-from evaluator import *
-from classifier import BinaryClassifier
+from gpibc.evaluator import *
+from gpibc.classifier import BinaryClassifier
 
 IH = 64
 IW = 64

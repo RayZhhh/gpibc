@@ -1,16 +1,14 @@
 # This file defines device-side operators.
 import math
 import os
-import random
 import time
 
-import numba
 import numpy as np
 from PIL import Image
 from numba import cuda
 
-import fset
-from program import Program
+from gpibc import fset
+from gpibc.program import Program
 
 MAX_PIXEL_VALUE = 255
 

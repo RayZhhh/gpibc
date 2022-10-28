@@ -3,9 +3,8 @@ import time
 from PIL import Image
 import os
 
-import evaluator
-from evaluator import *
-from classifier import BinaryClassifier
+from gpibc.evaluator import *
+from gpibc.classifier import BinaryClassifier
 
 IH = 128
 IW = 128
@@ -46,23 +45,9 @@ def create_dataset():
 
 
 if __name__ == '__main__':
-    # data = np.ones((20000, 32, 32), float)
-    # label = np.ones(20000, float)
-
     data, label = create_dataset()
 
-    # population = [Program(IH, IW, init_method='growth') for _ in range(5)]
-    # eval = evaluator.GPUPopulationEvaluator(data, label)
-    # eval1 = evaluator.GPUProgramEvaluator(data, label)
-    # eval.fitness_evaluate(population)
-    # for p in population:
-    #     print(p.fitness)
-    #
-    # for p in population:
-    #     eval1.fitness_evaluate(p)
-    #     print(p.fitness)
-
-    classifier = BinaryClassifier(data, label, eval_method='population')
+    classifier = BinaryClassifier(data, label)
     ts = time.time()
     classifier.train()
     print('training time: ', time.time() - ts)

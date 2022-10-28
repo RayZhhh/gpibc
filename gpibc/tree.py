@@ -1,10 +1,6 @@
 import random
-from typing import List, Tuple
 
-import numpy as np
-
-import fset
-from fset import *
+from .fset import *
 
 
 terminal_set = [Region_S, Region_R]
@@ -39,20 +35,20 @@ class Node:
         self.rw = rw
 
     def __repr__(self):
-        return fset.to_str(self.name)
+        return to_str(self.name)
 
     def __str__(self):
-        return fset.to_str(self.name) + '(' + str(self.rx) + ', ' + str(self.ry) + ', ' \
-               + str(self.rh) + ', ' + str(self.rw) + ')' if self.is_terminal() else fset.to_str(self.name)
+        return to_str(self.name) + '(' + str(self.rx) + ', ' + str(self.ry) + ', ' \
+               + str(self.rh) + ', ' + str(self.rw) + ')' if self.is_terminal() else to_str(self.name)
 
     def is_binary_function(self):
-        return fset.is_binary_function(self.name)
+        return is_binary_function(self.name)
 
     def is_unary_function(self):
-        return fset.is_unary_function(self.name)
+        return is_unary_function(self.name)
 
     def is_terminal(self):
-        return fset.is_terminal(self.name)
+        return is_terminal(self.name)
 
 
 def rand_terminal_node(img_h, img_w) -> Node:

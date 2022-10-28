@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-import random
-from typing import List, Tuple
-
-import fset
-import tree
-from tree import Node, TreeGenerator
+from typing import Tuple
+from .tree import *
 
 
 def _subtree_index(prefix: List[Node], start_pos) -> Tuple[int, int]:
@@ -89,16 +85,16 @@ class Program:
         self_start, self_end = _subtree_index(prefix=self.prefix, start_pos=self_start)
 
         root_func = self.prefix[self_start].name
-        if root_func == fset.Sub:
-            root_indexes = [i for i in range(len(donor)) if donor[i].name == fset.Sub or donor[i].name == fset.G_Std]
+        if root_func == Sub:
+            root_indexes = [i for i in range(len(donor)) if donor[i].name == Sub or donor[i].name == G_Std]
             rand_start_pos = random.sample(population=root_indexes, k=1)[0]
             donor_start, donor_end = _subtree_index(prefix=dprefix, start_pos=rand_start_pos)
-        elif root_func == fset.G_Std:
-            root_indexes = [i for i in range(len(donor)) if donor[i].name == fset.G_Std]
+        elif root_func == G_Std:
+            root_indexes = [i for i in range(len(donor)) if donor[i].name == G_Std]
             rand_start_pos = random.sample(population=root_indexes, k=1)[0]
             donor_start, donor_end = _subtree_index(prefix=dprefix, start_pos=rand_start_pos)
         else:
-            root_indexes = [i for i in range(len(donor)) if donor[i].name != fset.Sub and donor[i].name != fset.G_Std]
+            root_indexes = [i for i in range(len(donor)) if donor[i].name != Sub and donor[i].name != G_Std]
             rand_start_pos = random.sample(population=root_indexes, k=1)[0]
             donor_start, donor_end = _subtree_index(prefix=dprefix, start_pos=rand_start_pos)
 
@@ -112,13 +108,13 @@ class Program:
 
     def point_mutation(self):
         point_indexes = [i for i in range(len(self.prefix))
-                         if self.prefix[i].name != fset.Sub and self.prefix[i].name != fset.G_Std]
+                         if self.prefix[i].name != Sub and self.prefix[i].name != G_Std]
         pos = random.sample(population=point_indexes, k=1)[0]
 
         if self[pos].is_terminal():
-            self.prefix[pos] = tree.rand_terminal_node(self.img_h, self.img_w)
+            self.prefix[pos] = rand_terminal_node(self.img_h, self.img_w)
         else:
-            self.prefix[pos] = tree.rand_inter_func_node()
+            self.prefix[pos] = rand_inter_func_node()
 
     def subtree_mutation(self):
         gener = TreeGenerator(depth=self._init_depth, img_h=self.img_h, img_w=self.img_w)
@@ -135,14 +131,14 @@ class Program:
 
     def hoist_mutation(self):
         # random subtree of self.prefix
-        root_indexes = [i for i in range(1, len(self.prefix)) if self.prefix[i].name != fset.G_Std]
+        root_indexes = [i for i in range(1, len(self.prefix)) if self.prefix[i].name != G_Std]
         rand_start_pos = random.sample(population=root_indexes, k=1)[0]
         start1, end1 = _subtree_index(prefix=self.prefix, start_pos=rand_start_pos)
         subtree = [self.prefix[i] for i in range(start1, end1)]
 
-        if self.prefix[start1].name == fset.Sub:
+        if self.prefix[start1].name == Sub:
             root_indexes = [i for i in range(len(subtree))
-                            if subtree[i].name == fset.Sub or subtree[i].name == fset.G_Std]
+                            if subtree[i].name == Sub or subtree[i].name == G_Std]
             rand_start_pos = random.sample(population=root_indexes, k=1)[0]
             start2, end2 = _subtree_index(prefix=subtree, start_pos=rand_start_pos)
         else:

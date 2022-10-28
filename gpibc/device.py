@@ -4,7 +4,7 @@
 
 import math
 from numba import cuda
-import fset
+from .fset import *
 
 MAX_PIXEL_VALUE = 255
 MAX_PROGRAM_LEN = 200
@@ -491,54 +491,54 @@ def calc_pop_fit(name, rx, ry, rh, rw, plen, img_h, img_w, data_size, dataset, s
 
     # reverse iteration
     for i in range(plen[program_no] - 1, -1, -1):
-        if name[program_no][i] == fset.Region_R:
+        if name[program_no][i] == Region_R:
             reg_x, reg_y, reg_h, reg_w = rx[program_no][i], ry[program_no][i], rh[program_no][i], rw[program_no][i]
             region(dataset, data_size, img_h, img_w, stack)
 
-        elif name[program_no][i] == fset.Region_S:
+        elif name[program_no][i] == Region_S:
             reg_x, reg_y, reg_h, reg_w = rx[program_no][i], ry[program_no][i], rh[program_no][i], rw[program_no][i]
             region(dataset, data_size, img_h, img_w, stack)
 
-        elif name[program_no][i] == fset.G_Std:
+        elif name[program_no][i] == G_Std:
             g_std(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, std_res, top)
             top += 1
 
-        elif name[program_no][i] == fset.Hist_Eq:
+        elif name[program_no][i] == Hist_Eq:
             hist_eq(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, hist_buffer)
 
-        elif name[program_no][i] == fset.Gau1:
+        elif name[program_no][i] == Gau1:
             gau1(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer)
             reg_x, reg_y, reg_h, reg_w = reg_x + 1, reg_y + 1, reg_h - 2, reg_w - 2
 
-        elif name[program_no][i] == fset.Gau11:
+        elif name[program_no][i] == Gau11:
             pass
 
-        elif name[program_no][i] == fset.GauXY:
+        elif name[program_no][i] == GauXY:
             pass
 
-        elif name[program_no][i] == fset.Lap:
+        elif name[program_no][i] == Lap:
             lap(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer)
             reg_x, reg_y, reg_h, reg_w = reg_x + 1, reg_y + 1, reg_h - 2, reg_w - 2
 
-        elif name[program_no][i] == fset.Sobel_X:
+        elif name[program_no][i] == Sobel_X:
             sobel_x(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer)
             reg_x, reg_y, reg_h, reg_w = reg_x + 1, reg_y + 1, reg_h - 2, reg_w - 2
 
-        elif name[program_no][i] == fset.Sobel_Y:
+        elif name[program_no][i] == Sobel_Y:
             sobel_y(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer)
             reg_x, reg_y, reg_h, reg_w = reg_x + 1, reg_y + 1, reg_h - 2, reg_w - 2
 
-        elif name[program_no][i] == fset.LoG1:
+        elif name[program_no][i] == LoG1:
             log1(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer)
             reg_x, reg_y, reg_h, reg_w = reg_x + 2, reg_y + 2, reg_h - 4, reg_w - 4
 
-        elif name[program_no][i] == fset.LoG2:
+        elif name[program_no][i] == LoG2:
             pass
 
-        elif name[program_no][i] == fset.HOG:
+        elif name[program_no][i] == HOG:
             pass
 
-        elif name[program_no][i] == fset.Sub:
+        elif name[program_no][i] == Sub:
             sub(std_res, top, data_size)
             top -= 1
 
