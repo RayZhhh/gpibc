@@ -58,6 +58,7 @@ def load_mnist_of_label(label):
 
 
 def create_dataset_and_label(l1, l2):
+    print('loading dataset...')
     data1 = load_mnist_of_label(l1)
     data2 = load_mnist_of_label(l2)
     data_ret = np.append(data1, data2) / 255

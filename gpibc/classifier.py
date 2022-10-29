@@ -3,6 +3,7 @@ import random
 
 import numba.cuda
 import numpy as np
+from numba import cuda
 
 from .program import Program
 from .fset import *
@@ -12,7 +13,7 @@ from .evaluator import GPUPopulationEvaluator
 class BinaryClassifier:
     def __init__(self, dataset: np.ndarray, label: np.ndarray, population_size=500, init_method='ramped_half_and_half',
                  init_depth=(3, 6), max_program_depth=6, generations=50, elist_size=5, tournament_size=5,
-                 crossover_prob=0.6, mutation_prob=0.3, device='cuda', eval_batch=100):
+                 crossover_prob=0.6, mutation_prob=0.3, device='cuda:0', eval_batch=100):
         """
         Args:
             dataset          : dataset
@@ -47,14 +48,16 @@ class BinaryClassifier:
         self.tournament_size = tournament_size
         self.crossover_prob = crossover_prob
         self.mutation_prob = mutation_prob
-        self.device = device
+        self.device = device.split(':')[0]
+        self.device_id = int(device.split(':')[1])
         self.eval_batch = eval_batch
 
-        if device == 'cuda' and not numba.cuda.is_available():
+        if self.device == 'cuda' and not numba.cuda.is_available():
             raise RuntimeError('Do not support CUDA on your device.')
 
-        if device == 'cuda':
+        if self.device == 'cuda':
             self.gpu_evaluator_population = GPUPopulationEvaluator(self.dataset, self.label, self.eval_batch)
+            cuda.select_device(self.device_id)
         else:
             raise RuntimeError('Error: eval_method must be \'program\' or \'population\'.')
 
