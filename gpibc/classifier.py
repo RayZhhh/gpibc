@@ -1,7 +1,6 @@
 import copy
 import random
 
-import numba.cuda
 import numpy as np
 from numba import cuda
 
@@ -52,7 +51,7 @@ class BinaryClassifier:
         self.device_id = int(device.split(':')[1])
         self.eval_batch = eval_batch
 
-        if self.device == 'cuda' and not numba.cuda.is_available():
+        if self.device == 'cuda' and not cuda.is_available():
             raise RuntimeError('Do not support CUDA on your device.')
 
         if self.device == 'cuda':
