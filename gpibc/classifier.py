@@ -154,6 +154,7 @@ class BinaryClassifier:
         print('[ Generation   ] ', gen)
         print('[ Best Fitness ] ', self.best_fitness)
         print('[ Best Program ] ', self.best_program)
+        print('')
 
     def train(self):
 
