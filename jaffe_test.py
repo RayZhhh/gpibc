@@ -47,7 +47,7 @@ def create_dataset():
 
 if __name__ == '__main__':
     data, label = create_dataset()
-    classifier = BinaryClassifier(data, label, eval_batch=200)
+    classifier = BinaryClassifier(data, label, eval_batch=100)
 
     ts = time.time()
     classifier.train()

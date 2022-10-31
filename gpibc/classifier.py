@@ -10,13 +10,17 @@ from .evaluator import GPUPopulationEvaluator
 
 
 class BinaryClassifier:
-    def __init__(self, dataset: np.ndarray, label: np.ndarray, population_size=500, init_method='ramped_half_and_half',
-                 init_depth=(3, 6), max_program_depth=6, generations=50, elist_size=5, tournament_size=5,
-                 crossover_prob=0.6, mutation_prob=0.3, device='cuda:0', eval_batch=100):
+    def __init__(self, train_set: np.ndarray, train_label: np.ndarray, test_set=None, test_label=None, run_test=False,
+                 population_size=500, init_method='ramped_half_and_half', init_depth=(3, 6), max_program_depth=6,
+                 generations=50, elist_size=5, tournament_size=5, crossover_prob=0.6, mutation_prob=0.3,
+                 device='cuda:0', eval_batch=100):
         """
         Args:
-            dataset          : dataset
-            label            : label set
+            train_set        : dataset for training
+            train_label      : label set for training
+            test_set         : dataset for testing
+            test_label       : label for testing
+            run_test         : testing the best program on the test set in the population during each iteration
             population_size  : population size
             init_method      : 'full', 'growth', of 'ramped_half_and_half'
             init_depth       : the initial depth of the program
@@ -29,15 +33,22 @@ class BinaryClassifier:
             device           : the device on which executes fitness evaluation
             eval_batch       : the number of program to evaluate simultaneously, valid when eval_method='population'
         """
-        self.dataset = dataset
-        self.label = label
+        self.train_set = train_set
+        self.train_label = train_label
 
-        if len(dataset) != len(label):
-            raise RuntimeError('The length of dataset is not equal to the length of the label set.')
+        if len(train_set) != len(train_label):
+            raise RuntimeError('The length of train set is not equal to the length of the train label set.')
 
-        self.data_size = len(dataset)
-        self.img_h = len(dataset[0])
-        self.img_w = len(dataset[0][0])
+        self.test_set = test_set
+        self.test_label = test_label
+
+        if test_set is not None and test_label is not None and len(test_set) != len(test_label):
+            raise RuntimeError('The length of test set is not equal to the length of the test label set.')
+
+        self.run_test = run_test
+        self.data_size = len(train_set)
+        self.img_h = len(train_set[0])
+        self.img_w = len(train_set[0][0])
         self.population_size = population_size
         self.init_method = init_method
         self.init_depth = init_depth
@@ -55,8 +66,13 @@ class BinaryClassifier:
             raise RuntimeError('Do not support CUDA on your device.')
 
         if self.device == 'cuda':
-            self.gpu_evaluator_population = GPUPopulationEvaluator(self.dataset, self.label, self.eval_batch)
+            self.gpu_evaluator = GPUPopulationEvaluator(self.train_set, self.train_label, self.eval_batch)
             cuda.select_device(self.device_id)
+
+            # evaluator for the test set
+            if self.test_set is not None and self.run_test is True:
+                self.test_gpu_evaluator = GPUPopulationEvaluator(self.test_set, self.test_label)
+
         else:
             raise RuntimeError('Error: eval_method must be \'program\' or \'population\'.')
 
@@ -64,6 +80,9 @@ class BinaryClassifier:
         self.population: List[Program] = []
         self.best_program: Program = ...
         self.best_fitness: float = ...
+        #
+        self.best_program_test: Program = ...
+        self.best_test_fitness: float = ...
 
     def population_init(self):
         if self.init_method == 'full':
@@ -115,9 +134,12 @@ class BinaryClassifier:
         pass
 
     def _fitness_evaluation_gpu_pop(self):
-        for i in range(0, self.population_size, self.eval_batch):
-            last_pos = min(i + self.eval_batch, self.population_size)
-            self.gpu_evaluator_population.fitness_evaluate(self.population[i: last_pos])
+        self.gpu_evaluator.fitness_evaluate(evaluated_population=self.population)
+
+    def _test_best_program(self) -> float:
+        test_program = copy.deepcopy(self.best_program)
+        self.test_gpu_evaluator.fitness_evaluate(evaluated_population=[test_program])
+        return test_program.fitness
 
     def _update_generation_properties(self):
         self.best_program = self.population[0]
@@ -130,9 +152,8 @@ class BinaryClassifier:
 
     def _print_population_properties(self, gen):
         print('[ Generation   ] ', gen)
-        print('[ Best fitness ] ', self.best_fitness)
-        print('[ Best program ] ', self.best_program)
-        print('')
+        print('[ Best Fitness ] ', self.best_fitness)
+        print('[ Best Program ] ', self.best_program)
 
     def train(self):
 

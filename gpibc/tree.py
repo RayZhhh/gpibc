@@ -2,6 +2,25 @@ import random
 
 from .fset import *
 
+# #################################################################################
+# Multi-Layer GP tree structure.
+# #################################################################################
+# Classification Layer =======> class_0 <= [result <= 0] | [result > 0] => class_1
+#                                                        |
+#                                                      [Sub]
+#                                                     /     \
+# Feature Construction Layer =>                 [G_Std]      [G_Std]
+#                                                  |            |
+#                                             [Hist_Eq]      [Lap]
+#                                                  |            |
+# Feature Extraction Layer ===>               [Sobel_X]      [Sobel_Y]
+#                                                  |            |
+# Region Detection Layer =====>              [Region_S]      [Region_R]
+#                                                  |            |
+# Input Layer ================>        [rx, ry, rh, rw]      [rx, ry, rh, rw]
+#
+# #################################################################################
+
 
 terminal_set = [Region_S, Region_R]
 inter_func_set = [Hist_Eq, Gau1, Lap, Sobel_X, Sobel_Y, LoG1]
