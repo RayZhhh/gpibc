@@ -4,7 +4,7 @@
 
 import math
 from numba import cuda
-from .fset import *
+from ..genetic.fset import *
 
 MAX_PIXEL_VALUE = 255
 MAX_PROGRAM_LEN = 200

@@ -1,10 +1,9 @@
-import sys
 import time
 
 from PIL import Image
 import os
 
-from gpibc.evaluator import *
+from gpibc.cu_device.evaluator import *
 from gpibc.classifier import BinaryClassifier
 
 IH = 128

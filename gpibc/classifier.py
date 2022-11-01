@@ -4,9 +4,9 @@ import random
 import numpy as np
 from numba import cuda
 
-from .program import Program
-from .fset import *
-from .evaluator import GPUPopulationEvaluator
+from .genetic.program import Program
+from .genetic.fset import *
+from .cu_device.evaluator import GPUPopulationEvaluator
 
 
 class BinaryClassifier:

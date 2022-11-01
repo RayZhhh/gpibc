@@ -4,7 +4,7 @@ import numpy as np
 from numba import cuda
 
 from .device import MAX_TOP, MAX_PROGRAM_LEN, MAX_PIXEL_VALUE, calc_pop_fit
-from .program import Program
+from ..genetic.program import Program
 
 
 class GPUPopulationEvaluator:
