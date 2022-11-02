@@ -1,10 +1,13 @@
+import sys
 import time
 
+import numpy as np
 from PIL import Image
 import os
 
-from gpibc.classifier import BinaryClassifier
-import numpy as np
+from gpibc.eval_gpu import GPUPopulationEvaluator
+from gpibc.eval_cpu import CPUEvaluator
+from gpibc.genetic.program import Program
 
 IH = 128
 IW = 128
@@ -25,8 +28,8 @@ def create_dataset():
             data_ret = np.append(data_ret, image_arr)
             label_ret = np.append(label_ret, [1])
             num += 1
-            # if num >= 10:
-            #     break
+            if num >= 5:
+                break
     # load label [-1]
     for root, ds, fs in os.walk('datasets/jaffe/surprise'):
         num = 0
@@ -39,15 +42,25 @@ def create_dataset():
             data_ret = np.append(data_ret, image_arr)
             label_ret = np.append(label_ret, [-1])
             num += 1
-            # if num >= 10:
-            #     break
+            if num >= 5:
+                break
     return data_ret.reshape(-1, IH, IW), label_ret
 
 
 if __name__ == '__main__':
     data, label = create_dataset()
-    classifier = BinaryClassifier(data, label, eval_batch=100)
+    eval = CPUEvaluator(data, label)
+    geval = GPUPopulationEvaluator(data, label)
 
-    ts = time.time()
-    classifier.train()
-    print('training time: ', time.time() - ts)
+    for i in range(100):
+        p = Program(IH, IW, init_method='growth')
+        eval.eval_program_fitness(p)
+        cfit = p.fitness
+        print('cpu: ', cfit)
+        geval.fitness_evaluate([p])
+        gfit = p.fitness
+        print('gpu: ', gfit)
+        print()
+        if cfit != gfit:
+            print(p)
+            sys.exit(0)

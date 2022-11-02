@@ -6,7 +6,7 @@ from numba import cuda
 
 from .genetic.program import Program
 from .genetic.fset import *
-from .cu_device.evaluator import GPUPopulationEvaluator
+from .eval_gpu import GPUPopulationEvaluator
 
 
 class BinaryClassifier:
@@ -30,7 +30,7 @@ class BinaryClassifier:
             tournament_size  : tournament size while performing tournament selection
             crossover_prob   : crossover probability
             mutation_prob    : mutation probability
-            device           : the device on which executes fitness evaluation
+            device           : the cuda_device on which executes fitness evaluation
             eval_batch       : the number of program to evaluate simultaneously, valid when eval_method='population'
         """
         self.train_set = train_set
@@ -63,7 +63,7 @@ class BinaryClassifier:
         self.eval_batch = eval_batch
 
         if self.device == 'cuda' and not cuda.is_available():
-            raise RuntimeError('Do not support CUDA on your device.')
+            raise RuntimeError('Do not support CUDA on your cuda_device.')
 
         if self.device == 'cuda':
             self.gpu_evaluator = GPUPopulationEvaluator(self.train_set, self.train_label, self.eval_batch)
