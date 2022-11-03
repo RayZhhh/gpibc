@@ -46,7 +46,7 @@ def create_dataset():
 
 if __name__ == '__main__':
     data, label = create_dataset()
-    classifier = BinaryClassifier(data, label, eval_batch=100)
+    classifier = BinaryClassifier(data, label, eval_batch=100, population_size=100, device='cuda:0')
 
     ts = time.time()
     classifier.train()

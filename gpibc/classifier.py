@@ -4,14 +4,15 @@ import random
 import numpy as np
 from numba import cuda
 
-from .genetic.program import Program
-from .genetic.fset import *
+from gpibc.program import Program
+from gpibc.fset import *
 from .eval_gpu import GPUPopulationEvaluator
+from .eval_cpu import CPUEvaluator
 
 
 class BinaryClassifier:
     def __init__(self, train_set: np.ndarray, train_label: np.ndarray, test_set=None, test_label=None, run_test=False,
-                 population_size=500, init_method='ramped_half_and_half', init_depth=(3, 6), max_program_depth=6,
+                 population_size=500, init_method='ramped_half_and_half', init_depth=(3, 6), max_program_depth=10,
                  generations=50, elist_size=5, tournament_size=5, crossover_prob=0.6, mutation_prob=0.3,
                  device='cuda:0', eval_batch=100):
         """
@@ -59,22 +60,28 @@ class BinaryClassifier:
         self.crossover_prob = crossover_prob
         self.mutation_prob = mutation_prob
         self.device = device.split(':')[0]
-        self.device_id = int(device.split(':')[1])
+
+        if self.device == 'cuda':
+            self.device_id = int(device.split(':')[1])
+
         self.eval_batch = eval_batch
 
         if self.device == 'cuda' and not cuda.is_available():
             raise RuntimeError('Do not support CUDA on your cuda_device.')
 
         if self.device == 'cuda':
-            self.gpu_evaluator = GPUPopulationEvaluator(self.train_set, self.train_label, self.eval_batch)
+            self.evaluator = GPUPopulationEvaluator(self.train_set, self.train_label, self.eval_batch)
             cuda.select_device(self.device_id)
 
             # evaluator for the test set
             if self.test_set is not None and self.run_test is True:
                 self.test_gpu_evaluator = GPUPopulationEvaluator(self.test_set, self.test_label)
 
+        elif self.device == 'cpu':
+            self.evaluator = CPUEvaluator(self.train_set, self.train_label)
+
         else:
-            raise RuntimeError('Error: eval_method must be \'program\' or \'population\'.')
+            raise RuntimeError('Do not support such device.')
 
         # population properties
         self.population: List[Program] = []
@@ -134,11 +141,11 @@ class BinaryClassifier:
         pass
 
     def _fitness_evaluation_gpu_pop(self):
-        self.gpu_evaluator.fitness_evaluate(evaluated_population=self.population)
+        self.evaluator.evaluate_population(population=self.population)
 
     def _test_best_program(self) -> float:
         test_program = copy.deepcopy(self.best_program)
-        self.test_gpu_evaluator.fitness_evaluate(evaluated_population=[test_program])
+        self.test_gpu_evaluator.evaluate_population(population=[test_program])
         return test_program.fitness
 
     def _update_generation_properties(self):
@@ -157,17 +164,13 @@ class BinaryClassifier:
         print('')
 
     def train(self):
-
         # population initialization
         self.population_init()
 
         # evaluate fitness for the initial population
-        if self.device == 'cuda':
-            self._fitness_evaluation_gpu_pop()
-        else:
-            for program in self.population:
-                self._fitness_evaluation_cpu(program)
+        self.evaluator.evaluate_population(self.population)
 
+        # update
         self._update_generation_properties()
         self._print_population_properties(gen=0)
 
@@ -193,11 +196,7 @@ class BinaryClassifier:
             self.population = new_population
 
             # fitness evaluation
-            if self.device == 'cuda':
-                self._fitness_evaluation_gpu_pop()
-            else:
-                for program in self.population:
-                    self._fitness_evaluation_cpu(program)
+            self.evaluator.evaluate_population(self.population)
 
             # update
             self._update_generation_properties()

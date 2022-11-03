@@ -1,11 +1,10 @@
 # This file defines GP operators for CPU.
-import sys
 
 import numpy as np
 from numpy import ndarray
 
-from .genetic.fset import *
-from .genetic.program import Program
+from .fset import *
+from .program import Program
 
 MAX_PIXEL_VALUE = 255
 
@@ -38,12 +37,12 @@ def __conv2d_5x5(region: ndarray, kernel) -> ndarray:
     return buffer[2:-2, 2:-2]
 
 
-def g_std(region: ndarray) -> float:
+def _g_std(region: ndarray) -> float:
     std = float(np.std(region))
     return std
 
 
-def hist_eq(region: ndarray):
+def _hist_eq(region: ndarray):
     buffer = np.zeros(shape=(len(region), len(region[0])), dtype=float)
     hist_buffer = [0] * (MAX_PIXEL_VALUE + 1)
     pixel_num = len(region) * len(region[0])
@@ -71,7 +70,7 @@ def hist_eq(region: ndarray):
     return buffer
 
 
-def lap(region):
+def _lap(region):
     """
     The Laplacian kernel is: [0, 1, 0]
                              [1,-4, 1]
@@ -81,7 +80,7 @@ def lap(region):
     return __conv2d_3x3(region, kernel)
 
 
-def sobel_x(region):
+def _sobel_x(region):
     """The Sobel Vertical kernel is: [ 1, 2, 1]
                                      [ 0, 0, 0]
                                      [-1,-2,-1].
@@ -90,7 +89,7 @@ def sobel_x(region):
     return __conv2d_3x3(region, kernel)
 
 
-def sobel_y(region):
+def _sobel_y(region):
     """The Sobel Horizontal kernel is: [-1, 0, 1 ]
                                        [-2, 0, 2 ]
                                        [-1, 0, 1 ].
@@ -99,7 +98,7 @@ def sobel_y(region):
     return __conv2d_3x3(region, kernel)
 
 
-def gau1(region):
+def _gau1(region):
     """
     The Gaussian smooth kernel is: [1, 2, 1]
                                    [2, 4, 2] * (1 / 16).
@@ -109,12 +108,12 @@ def gau1(region):
     return __conv2d_3x3(region, kernel)
 
 
-def log_1(region):
+def _log1(region):
     kernel = [[0, 0, 1, 0, 0], [0, 1, 2, 1, 0], [1, 2, -16, 2, 1], [0, 1, 2, 1, 0], [0, 0, 1, 0, 0]]
     return __conv2d_5x5(region, kernel)
 
 
-def lbp(region):
+def _lbp(region):
     """Perform Local Binary Pattern operation to images.
     Step 1:
         calculate the value of each pixel based on the threshold
@@ -148,58 +147,59 @@ def lbp(region):
             region[i][j] = sum
 
 
+def _infer_program(program: Program, img: ndarray) -> float:
+    stack = []
+    region: ndarray = ...
+    for node in reversed(program.prefix):
+        rx, ry, rh, rw = node.rx, node.ry, node.rh, node.rw
+        if node.name == Region_R or node.name == Region_S:
+            region = img[rx:rx + rh, ry:ry + rw]
+        elif node.name == G_Std:
+            stack.append(_g_std(region))
+        elif node.name == Hist_Eq:
+            region = _hist_eq(region)
+        elif node.name == Gau1:
+            region = _gau1(region)
+        elif node.name == Gau11:
+            pass
+        elif node.name == GauXY:
+            pass
+        elif node.name == Lap:
+            region = _lap(region)
+        elif node.name == Sobel_X:
+            region = _sobel_x(region)
+        elif node.name == Sobel_Y:
+            region = _sobel_y(region)
+        elif node.name == LoG1:
+            region = _log1(region)
+        elif node.name == LoG2:
+            pass
+        elif node.name == HOG:
+            pass
+        elif node.name == Sub:
+            std1 = stack.pop()
+            std2 = stack.pop()
+            stack.append(std2 - std1)
+    assert len(stack) == 1
+    return stack.pop()
+
+
 class CPUEvaluator:
     def __init__(self, data, label):
         self.data = data
         self.label = label
         self.data_size = len(data)
-        self.img_h = len(self.data[0])
-        self.img_w = len(self.data[0][0])
+        # self.img_h = len(self.data[0])
+        # self.img_w = len(self.data[0][0])
 
-    def eval_program_fitness(self, program: Program):
+    def evaluate_program(self, program: Program):
         correct = 0
         for i in range(len(self.data)):
-            res = self.infer_program(program, self.data[i])
+            res = _infer_program(program, self.data[i])
             if res < 0 and self.label[i] < 0 or res > 0 and self.label[i] > 0:
                 correct += 1
         program.fitness = correct / self.data_size
 
-    def eval_population_fitness(self, population: List[Program]):
+    def evaluate_population(self, population: List[Program]):
         for program in population:
-            self.eval_program_fitness(program)
-
-    def infer_program(self, program: Program, img: ndarray) -> float:
-        stack = []
-        region: ndarray = ...
-        for node in reversed(program.prefix):
-            rx, ry, rh, rw = node.rx, node.ry, node.rh, node.rw
-            if node.name == Region_R or node.name == Region_S:
-                region = img[rx:rx + rh, ry:ry + rw]
-            elif node.name == G_Std:
-                stack.append(g_std(region))
-            elif node.name == Hist_Eq:
-                region = hist_eq(region)
-            elif node.name == Gau1:
-                region = gau1(region)
-            elif node.name == Gau11:
-                pass
-            elif node.name == GauXY:
-                pass
-            elif node.name == Lap:
-                region = lap(region)
-            elif node.name == Sobel_X:
-                region = sobel_x(region)
-            elif node.name == Sobel_Y:
-                region = sobel_y(region)
-            elif node.name == LoG1:
-                region = log_1(region)
-            elif node.name == LoG2:
-                pass
-            elif node.name == HOG:
-                pass
-            elif node.name == Sub:
-                std1 = stack.pop()
-                std2 = stack.pop()
-                stack.append(std2 - std1)
-        assert len(stack) == 1
-        return stack.pop()
+            self.evaluate_program(program)

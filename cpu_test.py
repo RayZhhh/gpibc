@@ -1,5 +1,4 @@
 import sys
-import time
 
 import numpy as np
 from PIL import Image
@@ -7,7 +6,7 @@ import os
 
 from gpibc.eval_gpu import GPUPopulationEvaluator
 from gpibc.eval_cpu import CPUEvaluator
-from gpibc.genetic.program import Program
+from gpibc.program import Program
 
 IH = 128
 IW = 128
@@ -54,10 +53,10 @@ if __name__ == '__main__':
 
     for i in range(100):
         p = Program(IH, IW, init_method='growth')
-        eval.eval_program_fitness(p)
+        eval.evaluate_program(p)
         cfit = p.fitness
         print('cpu: ', cfit)
-        geval.fitness_evaluate([p])
+        geval.evaluate_population([p])
         gfit = p.fitness
         print('gpu: ', gfit)
         print()

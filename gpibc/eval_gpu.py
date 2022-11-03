@@ -5,8 +5,8 @@
 import math
 from numba import cuda
 import numpy as np
-from .genetic.fset import *
-from .genetic.program import Program
+from .fset import *
+from .program import Program
 
 MAX_PIXEL_VALUE = 255
 MAX_PROGRAM_LEN = 200
@@ -551,6 +551,10 @@ def infer_population(name, rx, ry, rh, rw, plen, img_h, img_w, data_size, datase
             _log1(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer)
             reg_x, reg_y, reg_h, reg_w = reg_x + 2, reg_y + 2, reg_h - 4, reg_w - 4
 
+        elif name[program_no][i] == LBP:
+            _lbp(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer)
+            reg_x, reg_y, reg_h, reg_w = reg_x + 1, reg_y + 1, reg_h - 2, reg_w - 2
+
         elif name[program_no][i] == LoG2:
             pass
 
@@ -594,10 +598,6 @@ class GPUPopulationEvaluator:
         self._dres = self._allocate_device_res_buffer()
         self._dconv_buffer = self._allocate_device_conv_buffer()
 
-        # population
-        self.population = ...
-        self.pop_size = ...
-
     def _allocate_device_stack(self):
         return cuda.device_array(self.data_size * self.img_h * self.img_w * self.eval_batch, float)
 
@@ -610,25 +610,25 @@ class GPUPopulationEvaluator:
     def _allocate_device_res_buffer(self):
         return cuda.device_array(self.max_top * self.data_size * self.eval_batch)
 
-    def _fitness_evaluate_for_a_batch(self, population: List[Program]):
-        self.population = population
-        self.pop_size = len(population)
+    def _fitness_evaluate_for_a_batch(self, pop_batch: List[Program]):
+        """Evaluate a population"""
+        cur_batch_size = len(pop_batch)
 
         # the size of the current pop to be eval must <= the size of eval_batch
-        if self.pop_size > self.eval_batch:
+        if cur_batch_size > self.eval_batch:
             raise RuntimeError('Error: pop size > eval batch.')
 
         # allocate cuda_device side programs
-        name = np.zeros((self.pop_size, self.max_program_len), int)
-        rx = np.zeros((self.pop_size, self.max_program_len), int)
-        ry = np.zeros((self.pop_size, self.max_program_len), int)
-        rh = np.zeros((self.pop_size, self.max_program_len), int)
-        rw = np.zeros((self.pop_size, self.max_program_len), int)
-        plen = np.zeros(self.pop_size, int)  # an array stores the length of each program
+        name = np.zeros((cur_batch_size, self.max_program_len), int)
+        rx = np.zeros((cur_batch_size, self.max_program_len), int)
+        ry = np.zeros((cur_batch_size, self.max_program_len), int)
+        rh = np.zeros((cur_batch_size, self.max_program_len), int)
+        rw = np.zeros((cur_batch_size, self.max_program_len), int)
+        plen = np.zeros(cur_batch_size, int)  # an array stores the length of each program
 
         # parse the program
-        for i in range(self.pop_size):
-            program = self.population[i]
+        for i in range(cur_batch_size):
+            program = pop_batch[i]
             plen[i] = len(program)
             for j in range(len(program)):
                 name[i][j] = program[j].name
@@ -644,23 +644,27 @@ class GPUPopulationEvaluator:
         plen = cuda.to_device(plen)
 
         # launch kernel
-        grid = (int((self.data_size - 1 + self.thread_per_block) / self.thread_per_block), self.pop_size)
-        infer_population[grid, self.thread_per_block](name, rx, ry, rh, rw, plen, self.img_h, self.img_w, self.data_size,
-                                                      self._ddataset, self._dstack, self._dconv_buffer, self._dhist,
-                                                      self._dres)
+        grid = (int((self.data_size - 1 + self.thread_per_block) / self.thread_per_block), cur_batch_size)
+        infer_population[grid, self.thread_per_block](name, rx, ry, rh, rw, plen, self.img_h, self.img_w,
+                                                      self.data_size, self._ddataset, self._dstack, self._dconv_buffer,
+                                                      self._dhist, self._dres)
         cuda.synchronize()
 
         # get accuracy
         res = self._dres.copy_to_host().reshape(self.eval_batch, -1)
-        for i in range(self.pop_size):
+        for i in range(cur_batch_size):
             correct = 0
             for j in range(self.data_size):
                 if self.label[j] > 0 and res[i][j] > 0 or self.label[j] < 0 and res[i][j] < 0:
                     correct += 1
-            self.population[i].fitness = correct / self.data_size
+            pop_batch[i].fitness = correct / self.data_size
 
-    def fitness_evaluate(self, evaluated_population: List[Program]):
-        for i in range(0, len(evaluated_population), self.eval_batch):
-            last_pos = min(i + self.eval_batch, len(evaluated_population))
+    def evaluate_population(self, population: List[Program]):
+        """Evaluate fitness for a whole population.
+        Args:
+            population: the population to be evaluated
+        """
+        for i in range(0, len(population), self.eval_batch):
+            last_pos = min(i + self.eval_batch, len(population))
             # print(f'[{i} => {last_pos}]')
-            self._fitness_evaluate_for_a_batch(evaluated_population[i: last_pos])
+            self._fitness_evaluate_for_a_batch(population[i:last_pos])
