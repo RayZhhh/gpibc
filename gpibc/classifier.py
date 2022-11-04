@@ -11,7 +11,7 @@ from .eval_cpu import CPUEvaluator
 
 
 class BinaryClassifier:
-    def __init__(self, train_set: np.ndarray, train_label: np.ndarray, test_set=None, test_label=None, run_test=False,
+    def __init__(self, train_set: np.ndarray, train_label: np.ndarray, test_set=None, test_label=None,
                  population_size=500, init_method='ramped_half_and_half', init_depth=(3, 6), max_program_depth=10,
                  generations=50, elist_size=5, tournament_size=5, crossover_prob=0.6, mutation_prob=0.3,
                  device='cuda:0', eval_batch=100):
@@ -21,7 +21,6 @@ class BinaryClassifier:
             train_label      : label set for training
             test_set         : dataset for testing
             test_label       : label for testing
-            run_test         : testing the best program on the test set in the population during each iteration
             population_size  : population size
             init_method      : 'full', 'growth', of 'ramped_half_and_half'
             init_depth       : the initial depth of the program
@@ -46,7 +45,6 @@ class BinaryClassifier:
         if test_set is not None and test_label is not None and len(test_set) != len(test_label):
             raise RuntimeError('The length of test set is not equal to the length of the test label set.')
 
-        self.run_test = run_test
         self.data_size = len(train_set)
         self.img_h = len(train_set[0])
         self.img_w = len(train_set[0][0])
@@ -74,8 +72,8 @@ class BinaryClassifier:
             cuda.select_device(self.device_id)
 
             # evaluator for the test set
-            if self.test_set is not None and self.run_test is True:
-                self.test_gpu_evaluator = GPUPopulationEvaluator(self.test_set, self.test_label)
+            if self.test_set is not None:
+                self.test_evaluator = GPUPopulationEvaluator(self.test_set, self.test_label)
 
         elif self.device == 'cpu':
             self.evaluator = CPUEvaluator(self.train_set, self.train_label)
@@ -86,10 +84,10 @@ class BinaryClassifier:
         # population properties
         self.population: List[Program] = []
         self.best_program: Program = ...
+        self.best_program_in_each_gen: List[Program] = []
         self.best_fitness: float = ...
         #
-        self.best_program_test: Program = ...
-        self.best_test_fitness: float = ...
+        self.best_test_program: Program = ...
 
     def population_init(self):
         if self.init_method == 'full':
@@ -137,25 +135,10 @@ class BinaryClassifier:
 
         return program
 
-    def _fitness_evaluation_cpu(self, program: Program):
-        pass
-
-    def _fitness_evaluation_gpu_pop(self):
-        self.evaluator.evaluate_population(population=self.population)
-
-    def _test_best_program(self) -> float:
-        test_program = copy.deepcopy(self.best_program)
-        self.test_gpu_evaluator.evaluate_population(population=[test_program])
-        return test_program.fitness
-
     def _update_generation_properties(self):
-        self.best_program = self.population[0]
-        self.best_fitness = self.population[0].fitness
-
-        for i in range(self.population_size):
-            if self.population[i].fitness > self.best_fitness:
-                self.best_fitness = self.population[i].fitness
-                self.best_program = self.population[i]
+        self.best_program = max(self.population, key=lambda program: program.fitness)
+        self.best_fitness = self.best_program.fitness
+        self.best_program_in_each_gen.append(self.best_program)
 
     def _print_population_properties(self, gen):
         print('[ Generation   ] ', gen)
@@ -164,6 +147,8 @@ class BinaryClassifier:
         print('')
 
     def train(self):
+        self.best_program_in_each_gen = []
+
         # population initialization
         self.population_init()
 
@@ -201,3 +186,10 @@ class BinaryClassifier:
             # update
             self._update_generation_properties()
             self._print_population_properties(gen=iter_times)
+
+    def run_test(self):
+        self.test_evaluator.evaluate_population(self.best_program_in_each_gen)
+        self.best_test_program = max(self.best_program_in_each_gen, key=lambda program: program.fitness)
+        print(f'[ =========Run Test======== ]')
+        print(f'[ Best program in test data ] {self.best_test_program}')
+        print(f'[ Accuracy                  ] {self.best_test_program.fitness}')
