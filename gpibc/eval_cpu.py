@@ -2,6 +2,7 @@
 
 import numpy as np
 from numpy import ndarray
+from numba import jit
 
 from .fset import *
 from .program import Program
@@ -9,6 +10,7 @@ from .program import Program
 MAX_PIXEL_VALUE = 255
 
 
+@jit(nopython=True)
 def __conv2d_3x3(region: ndarray, kernel) -> ndarray:
     buffer = np.zeros(shape=(len(region), len(region[0])), dtype=float)
     for i in range(0, len(region) - 2):
@@ -23,6 +25,7 @@ def __conv2d_3x3(region: ndarray, kernel) -> ndarray:
     return buffer[1:-1, 1:-1]
 
 
+@jit(nopython=True)
 def __conv2d_5x5(region: ndarray, kernel) -> ndarray:
     buffer = np.zeros(shape=(len(region), len(region[0])), dtype=float)
     for i in range(0, len(region) - 4):
@@ -37,11 +40,13 @@ def __conv2d_5x5(region: ndarray, kernel) -> ndarray:
     return buffer[2:-2, 2:-2]
 
 
+@jit(nopython=True)
 def _g_std(region: ndarray) -> float:
     std = float(np.std(region))
     return std
 
 
+@jit(nopython=True)
 def _hist_eq(region: ndarray):
     buffer = np.zeros(shape=(len(region), len(region[0])), dtype=float)
     hist_buffer = [0] * (MAX_PIXEL_VALUE + 1)
@@ -70,6 +75,7 @@ def _hist_eq(region: ndarray):
     return buffer
 
 
+@jit(nopython=True)
 def _lap(region):
     """
     The Laplacian kernel is: [0, 1, 0]
@@ -80,6 +86,7 @@ def _lap(region):
     return __conv2d_3x3(region, kernel)
 
 
+@jit(nopython=True)
 def _sobel_x(region):
     """The Sobel Vertical kernel is: [ 1, 2, 1]
                                      [ 0, 0, 0]
@@ -89,6 +96,7 @@ def _sobel_x(region):
     return __conv2d_3x3(region, kernel)
 
 
+@jit(nopython=True)
 def _sobel_y(region):
     """The Sobel Horizontal kernel is: [-1, 0, 1 ]
                                        [-2, 0, 2 ]
@@ -98,6 +106,7 @@ def _sobel_y(region):
     return __conv2d_3x3(region, kernel)
 
 
+@jit(nopython=True)
 def _gau1(region):
     """
     The Gaussian smooth kernel is: [1, 2, 1]
@@ -108,11 +117,13 @@ def _gau1(region):
     return __conv2d_3x3(region, kernel)
 
 
+@jit(nopython=True)
 def _log1(region):
     kernel = [[0, 0, 1, 0, 0], [0, 1, 2, 1, 0], [1, 2, -16, 2, 1], [0, 1, 2, 1, 0], [0, 0, 1, 0, 0]]
     return __conv2d_5x5(region, kernel)
 
 
+@jit(nopython=True)
 def _lbp(region):
     """Perform Local Binary Pattern operation to images.
     Step 1:
@@ -147,39 +158,79 @@ def _lbp(region):
             region[i][j] = sum
 
 
+@jit(nopython=True)
+def _gau11(region):
+    """Perform Gau11 on image.
+    After Gau11 operation, rx += 1; ry += 1; rh -= 2; rw -= 2.
+
+    The kernel is: [0.1170, 0.0965, 0.1170]
+                   [0.0965, 0.0000, 0.0965]
+                   [0.1170, 0.0965, 0.1170].
+    """
+    kernel = [[0.1170, 0.0965, 0.1170], [0.0965, 0.0000, 0.0965], [0.1170, 0.0965, 0.1170]]
+    return __conv2d_3x3(region, kernel)
+
+
+@jit(nopython=True)
+def _gauxy(region):
+    """Perform GauXY on image.
+    After GauXY operation, rx += 1; ry += 1; rh -= 2; rw -= 2.
+
+    The kernel is: [0.0828, 0.0965, 0.0828]
+                   [0.0965, 0.0000, 0.0965]
+                   [0.0828, 0.0965, 0.0828].
+    """
+    kernel = [[0.0828, 0.0965, 0.0828], [0.0965, 0.0000, 0.0965], [0.0828, 0.0965, 0.0828]]
+    return __conv2d_3x3(region, kernel)
+
+
 def _infer_program(program: Program, img: ndarray) -> float:
     stack = []
     region: ndarray = ...
     for node in reversed(program.prefix):
         rx, ry, rh, rw = node.rx, node.ry, node.rh, node.rw
+
         if node.name == Region_R or node.name == Region_S:
             region = img[rx:rx + rh, ry:ry + rw]
+
         elif node.name == G_Std:
             stack.append(_g_std(region))
+
         elif node.name == Hist_Eq:
             region = _hist_eq(region)
+
         elif node.name == Gau1:
             region = _gau1(region)
+
         elif node.name == Gau11:
-            pass
+            region = _gau11(region)
+
         elif node.name == GauXY:
-            pass
+            region = _gauxy(region)
+
         elif node.name == Lap:
             region = _lap(region)
+
         elif node.name == Sobel_X:
             region = _sobel_x(region)
+
         elif node.name == Sobel_Y:
             region = _sobel_y(region)
+
         elif node.name == LoG1:
             region = _log1(region)
+
         elif node.name == LoG2:
             pass
+
         elif node.name == HOG:
             pass
+
         elif node.name == Sub:
             std1 = stack.pop()
             std2 = stack.pop()
             stack.append(std2 - std1)
+
     assert len(stack) == 1
     return stack.pop()
 

@@ -309,6 +309,80 @@ def _sobel_y(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
 
 
 @cuda.jit(device=True)
+def _gau11(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
+    """Perform Gau11 on image.
+    In this implementation, a thread is responsible for an image.
+    After Gau11 operation, rx += 1; ry += 1; rh -= 2; rw -= 2.
+
+    The kernel is: [0.1170, 0.0965, 0.1170]
+                   [0.0965, 0.0000, 0.0965]
+                   [0.1170, 0.0965, 0.1170].
+    """
+    # image index this thread is response for
+    img_index = cuda.blockDim.x * cuda.blockIdx.x + cuda.threadIdx.x
+
+    if img_index < data_size:
+        for i in range(rx + 1, rx + rh - 1):
+            for j in range(ry + 1, ry + rw - 1):
+                sum = 0
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j - 1) * 0.117
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j) * 0.0965
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j + 1) * 0.117
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j - 1) * 0.0965
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j + 1) * 0.0965
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j - 1) * 0.117
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j) * 0.0965
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j + 1) * 0.117
+                # sum = max(0, sum)
+                # sum = min(MAX_PIXEL_VALUE, sum)
+                buffer[__pixel_conv_buffer_index(data_size, im_h, im_w, i, j)] = sum
+
+        # copy the result from buffer to stack
+        for i in range(rx + 1, rx + rh - 1):
+            for j in range(ry + 1, ry + rw - 1):
+                stack_index = __pixel_index_in_stack(data_size, im_h, im_w, i, j)
+                stack[stack_index] = __pixel_value_in_conv_buffer(buffer, data_size, im_h, im_w, i, j)
+    cuda.syncthreads()
+
+
+@cuda.jit(device=True)
+def _gauxy(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
+    """Perform GauXY on image.
+    In this implementation, a thread is responsible for an image.
+    After GauXY operation, rx += 1; ry += 1; rh -= 2; rw -= 2.
+
+    The kernel is: [0.0828, 0.0965, 0.0828]
+                   [0.0965, 0.0000, 0.0965]
+                   [0.0828, 0.0965, 0.0828].
+    """
+    # image index this thread is response for
+    img_index = cuda.blockDim.x * cuda.blockIdx.x + cuda.threadIdx.x
+
+    if img_index < data_size:
+        for i in range(rx + 1, rx + rh - 1):
+            for j in range(ry + 1, ry + rw - 1):
+                sum = 0
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j - 1) * 0.0828
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j) * 0.0965
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j + 1) * 0.0828
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j - 1) * 0.0965
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j + 1) * 0.0965
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j - 1) * 0.0828
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j) * 0.0965
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j + 1) * 0.0828
+                # sum = max(0, sum)
+                # sum = min(MAX_PIXEL_VALUE, sum)
+                buffer[__pixel_conv_buffer_index(data_size, im_h, im_w, i, j)] = sum
+
+        # copy the result from buffer to stack
+        for i in range(rx + 1, rx + rh - 1):
+            for j in range(ry + 1, ry + rw - 1):
+                stack_index = __pixel_index_in_stack(data_size, im_h, im_w, i, j)
+                stack[stack_index] = __pixel_value_in_conv_buffer(buffer, data_size, im_h, im_w, i, j)
+    cuda.syncthreads()
+
+
+@cuda.jit(device=True)
 def _log1(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
     """Perform LoG1 on image.
         In this implementation, a thread is responsible for an image.
@@ -530,10 +604,12 @@ def infer_population(name, rx, ry, rh, rw, plen, img_h, img_w, data_size, datase
             reg_x, reg_y, reg_h, reg_w = reg_x + 1, reg_y + 1, reg_h - 2, reg_w - 2
 
         elif name[program_no][i] == Gau11:
-            pass
+            _gau11(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer)
+            reg_x, reg_y, reg_h, reg_w = reg_x + 1, reg_y + 1, reg_h - 2, reg_w - 2
 
         elif name[program_no][i] == GauXY:
-            pass
+            _gauxy(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer)
+            reg_x, reg_y, reg_h, reg_w = reg_x + 1, reg_y + 1, reg_h - 2, reg_w - 2
 
         elif name[program_no][i] == Lap:
             _lap(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer)
@@ -573,7 +649,7 @@ def infer_population(name, rx, ry, rh, rw, plen, img_h, img_w, data_size, datase
 
 
 class GPUPopulationEvaluator:
-    def __init__(self, data, label, eval_batch=1, thread_per_block=64):
+    def __init__(self, data, label, eval_batch=1, thread_per_block=256):
         """
         Args:
             data            : train-set or test-set

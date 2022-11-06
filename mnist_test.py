@@ -1,5 +1,8 @@
 import gzip
+import time
+
 import numpy as np
+import argparse
 
 from gpibc.classifier import BinaryClassifier
 
@@ -104,7 +107,8 @@ def create_dataset_and_label(l1, l2):
     print('loading dataset...')
     data1 = load_mnist_of_label(l1)
     data2 = load_mnist_of_label(l2)
-    data_ret = np.append(data1, data2) / 255
+    data_ret = np.append(data1, data2)
+    data_ret = data_ret / 255
     data_ret = data_ret.reshape(-1, 28, 28)
     label = np.array([1 for _ in range(len(data1))] + [-1 for _ in range(len(data2))])
     return data_ret, label
@@ -114,21 +118,36 @@ def create_test_set_and_label(l1, l2):
     print('loading test set...')
     data1 = load_test_set_of_label(l1)
     data2 = load_test_set_of_label(l2)
-    data_ret = np.append(data1, data2) / 255
+    data_ret = np.append(data1, data2)
+    data_ret = data_ret / 255
     data_ret = data_ret.reshape(-1, 28, 28)
     label = np.array([1 for _ in range(len(data1))] + [-1 for _ in range(len(data2))])
     return data_ret, label
 
 
-def test_mnist():
-    dataset, label = create_dataset_and_label(1, 2)
-    test_data, test_label = create_test_set_and_label(1, 2)
-    print(f'dataset shape: {dataset.shape} \n label shape: {label.shape}')
-    classifier = BinaryClassifier(dataset, label, test_data, test_label, eval_batch=15)
+def test_mnist(l1, l2, eval_batch=15):
+    dataset, label = create_dataset_and_label(l1, l2)
+    test_data, test_label = create_test_set_and_label(l1, l2)
+    print(f'dataset shape: {dataset.shape}')
+    print(f'test data shape: {test_data.shape}')
+    classifier = BinaryClassifier(dataset, label, test_data, test_label, eval_batch=eval_batch, device='cuda:0')
+
+    ts = time.time()
     classifier.train()
+    print('training time: ', time.time() - ts)
+
     classifier.run_test()
 
 
 if __name__ == '__main__':
-    test_mnist()
+    parser = argparse.ArgumentParser(description='Args for mnist test.')
+    parser.add_argument('--batch', '-b', default=18)
+    parser.add_argument('--label1', '-l1', default=0)
+    parser.add_argument('--label2', '-l2', default=1)
+    eval_batch = int(parser.parse_args().batch)
+    l1 = int(parser.parse_args().label1)
+    l2 = int(parser.parse_args().label2)
+    print(f'eval_batch: {eval_batch}; l1: {l1}; l2: {l2}')
+
+    test_mnist(l1, l2, eval_batch=eval_batch)
 

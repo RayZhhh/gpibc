@@ -2,7 +2,6 @@ import time
 
 from PIL import Image
 import os
-import random
 
 from gpibc.classifier import BinaryClassifier
 import numpy as np
@@ -26,7 +25,7 @@ def create_dataset():
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr / 255
             image_arr = image_arr.astype(float)
-            if num >= 5:
+            if num >= 8:
                 train_data = np.append(train_data, image_arr)
                 train_label = np.append(train_label, [1])
             else:
@@ -43,7 +42,7 @@ def create_dataset():
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr.astype(float)
             image_arr = image_arr / 255
-            if num >= 5:
+            if num >= 7:
                 train_data = np.append(train_data, image_arr)
                 train_label = np.append(train_label, [-1])
             else:
@@ -55,8 +54,10 @@ def create_dataset():
 
 if __name__ == '__main__':
     traind, trainl, testd, testl = create_dataset()
+    print(f'train data shape: {traind.shape}')
+    print(f'test data shape: {testd.shape}')
 
-    classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=100, population_size=500, device='cuda:0')
+    classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=250, population_size=500, device='cuda:0')
 
     ts = time.time()
     classifier.train()

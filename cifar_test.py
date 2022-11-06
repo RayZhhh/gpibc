@@ -1,3 +1,4 @@
+import argparse
 import time
 
 from PIL import Image
@@ -62,18 +63,32 @@ def create_test_dataset(name1, name2):
             image_arr = image_arr / 255
             data_ret = np.append(data_ret, image_arr)
             label_ret = np.append(label_ret, [-1])
-    print('Create dataset OK.')
+    print('Create test set OK.')
     return data_ret.reshape(-1, IH, IW), label_ret
 
 
-if __name__ == '__main__':
-    data, label = create_dataset('dog', 'cat')
-    test_data, test_label = create_test_dataset('dog', 'cat')
-    print(data.shape)
+def run_cifar(l1, l2, eval_batch):
+    data, label = create_dataset(l1, l2)
+    test_data, test_label = create_test_dataset(l1, l2)
+    print(f'data.shape: {data.shape}')
+    print(f'test_data.shape: {test_data.shape}')
 
-    classifier = BinaryClassifier(data, label, test_data, test_label, eval_batch=15, device='cuda:0')
+    classifier = BinaryClassifier(data, label, test_data, test_label, eval_batch=eval_batch, device='cuda:0')
 
     ts = time.time()
     classifier.train()
     print('training time: ', time.time() - ts)
     classifier.run_test()
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Args for mnist test.')
+    parser.add_argument('--batch', '-b', default=18)
+    parser.add_argument('--label1', '-l1', default='dog')
+    parser.add_argument('--label2', '-l2', default='cat')
+    eval_batch = int(parser.parse_args().batch)
+    l1 = parser.parse_args().label1
+    l2 = parser.parse_args().label2
+    print(f'eval_batch: {eval_batch}; l1: {l1}; l2: {l2}')
+
+    run_cifar(l1, l2, eval_batch)

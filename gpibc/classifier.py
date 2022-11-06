@@ -78,6 +78,10 @@ class BinaryClassifier:
         elif self.device == 'cpu':
             self.evaluator = CPUEvaluator(self.train_set, self.train_label)
 
+            # evaluator for the test set
+            if self.test_set is not None:
+                self.test_evaluator = CPUEvaluator(self.test_set, self.test_label)
+
         else:
             raise RuntimeError('Do not support such device.')
 

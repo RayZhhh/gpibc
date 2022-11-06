@@ -25,7 +25,7 @@ from .fset import *
 
 feature_construct_set = [G_Std, Sub]
 terminal_set = [Region_S, Region_R]
-inter_func_set = [Hist_Eq, Gau1, Lap, Sobel_X, Sobel_Y, LoG1, LBP]
+inter_func_set = [Hist_Eq, Gau1, Lap, Sobel_X, Sobel_Y, LoG1, LBP, Gau11, GauXY]
 
 
 def __rand_term() -> int:
