@@ -125,18 +125,30 @@ def create_test_set_and_label(l1, l2):
     return data_ret, label
 
 
-def test_mnist(l1, l2, eval_batch=15):
+def test_mnist(l1, l2, eval_batch):
     dataset, label = create_dataset_and_label(l1, l2)
     test_data, test_label = create_test_set_and_label(l1, l2)
     print(f'dataset shape: {dataset.shape}')
     print(f'test data shape: {test_data.shape}')
-    classifier = BinaryClassifier(dataset, label, test_data, test_label, eval_batch=eval_batch, device='cuda:0')
 
-    ts = time.time()
-    classifier.train()
-    print('training time: ', time.time() - ts)
+    with open('res.csv', 'a') as fout:
+        fout.write('mnist_test\n')
+        for _ in range(10):
+            classifier = BinaryClassifier(dataset, label, test_data, test_label, eval_batch=eval_batch, device='cuda:0')
 
-    classifier.run_test()
+            # train
+            ts = time.time()
+            classifier.train()
+            dur = time.time() - ts
+            print('training time: ', dur)
+
+            # test
+            classifier.run_test()
+
+            # write result
+            fout.write(str(dur) + ',' + str(classifier.best_test_program.fitness) + '\n')
+            del (classifier)
+        fout.write('\n')
 
 
 if __name__ == '__main__':

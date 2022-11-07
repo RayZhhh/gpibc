@@ -240,6 +240,13 @@ def _subtree_index(prefix: List[_Node], start_pos) -> Tuple[int, int]:
 
 class Program:
     def __init__(self, img_h, img_w, init_depth=6, init_method=None, prefix=None):
+        """Program for GP based image binary classification.
+        Args:
+            img_h      : image height
+            img_w      : image width
+            init_method: 'full' or 'growth'
+            prefix     : init by given prefix
+        """
         self.img_h = img_h
         self.img_w = img_w
         self.prefix: List[_Node] = []

@@ -58,11 +58,23 @@ def run_uiuc(eval_batch):
     print(f'train data shape: {traind.shape}')
     print(f'test data shape: {testd.shape}')
 
-    classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch, device='cuda:0')
-    ts = time.time()
-    classifier.train()
-    print('training time: ', time.time() - ts)
-    classifier.run_test()
+    with open('res.csv', 'a') as fout:
+        fout.write('uiuc_test\n')
+        for _ in range(10):
+            classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch, device='cuda:0')
+            # train
+            ts = time.time()
+            classifier.train()
+            dur = time.time() - ts
+            print('training time: ', dur)
+
+            # test
+            classifier.run_test()
+
+            # write result
+            fout.write(str(dur) + ',' + str(classifier.best_test_program.fitness) + '\n')
+            del (classifier)
+        fout.write('\n')
 
 
 if __name__ == '__main__':
