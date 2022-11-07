@@ -1,4 +1,5 @@
 #!/bin/bash
+rm -rf res.csv
 python jaffe_test.py -b 250
 python cifar_test.py -b 18
 python coil_20_test.py -b 125
