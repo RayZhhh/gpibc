@@ -3,8 +3,6 @@
 
 
 import math
-import time
-
 import numba
 from numba import cuda
 import numpy as np
@@ -385,21 +383,31 @@ def _log1(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
         for i in range(rx + 2, rx + rh - 2):
             for j in range(ry + 2, ry + rw - 2):
                 sum = 0
-                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 2, j)
-                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j - 1)
-                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j) * 2
-                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j + 1)
-                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j - 2)
-                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j - 2) * 2
-                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j) * 16
-                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j + 1) * 2
-                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j + 2)
-                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j - 1)
-                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j) * 2
-                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j + 1)
-                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 2, j)
-                # sum = max(0, sum)
-                # sum = min(MAX_PIXEL_VALUE, sum)
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 2, j - 2) * 0.109
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 2, j - 1) * 0.246
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 2, j) * 0.270
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 2, j + 1) * 0.246
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 2, j + 2) * 0.109
+                #
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j - 2) * 0.246
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j) * 0.606
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j + 2) * 0.246
+                #
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j - 2) * 0.270
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j - 1) * 0.606
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j) * 2
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j + 1) * 0.606
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j + 2) * 0.270
+                #
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j - 2) * 0.246
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j) * 0.606
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j + 2) * 0.246
+                #
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 2, j - 2) * 0.109
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 2, j - 1) * 0.246
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 2, j) * 0.270
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 2, j + 1) * 0.246
+                sum += __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 2, j + 2) * 0.109
                 buffer[__pixel_conv_buffer_index(data_size, im_h, im_w, i, j)] = sum
 
         # copy the result from buffer to stack
@@ -738,8 +746,8 @@ class NumbaCudaEvaluator:
         grid = (int((self.data_size - 1 + self.thread_per_block) / self.thread_per_block), cur_batch_size)
 
         infer_population[grid, self.thread_per_block](name, rx, ry, rh, rw, plen, self.img_h, self.img_w,
-                                                      self.data_size, self._d_dataset, self._d_stack, self._d_conv_buffer,
-                                                      self._d_hist, self._d_res)
+                                                      self.data_size, self._d_dataset, self._d_stack,
+                                                      self._d_conv_buffer, self._d_hist, self._d_res)
         cuda.synchronize()
 
         # get accuracy

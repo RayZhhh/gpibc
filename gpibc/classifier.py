@@ -7,7 +7,7 @@ from numba import cuda
 
 from gpibc.program import Program
 from gpibc.fset import *
-from .eval_gpu import NumbaCudaEvaluator
+from .eval_numba_cuda import NumbaCudaEvaluator
 from .eval_cpu import CPUEvaluator
 from .eval_pycuda import PyCudaEvaluator
 
