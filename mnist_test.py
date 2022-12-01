@@ -108,7 +108,6 @@ def create_dataset_and_label(l1, l2):
     data1 = load_mnist_of_label(l1)
     data2 = load_mnist_of_label(l2)
     data_ret = np.append(data1, data2)
-    # data_ret = data_ret / 255
     data_ret = data_ret.reshape(-1, 28, 28)
     label = np.array([1 for _ in range(len(data1))] + [-1 for _ in range(len(data2))])
     return data_ret, label
@@ -119,7 +118,6 @@ def create_test_set_and_label(l1, l2):
     data1 = load_test_set_of_label(l1)
     data2 = load_test_set_of_label(l2)
     data_ret = np.append(data1, data2)
-    # data_ret = data_ret / 255
     data_ret = data_ret.reshape(-1, 28, 28)
     label = np.array([1 for _ in range(len(data1))] + [-1 for _ in range(len(data2))])
     return data_ret, label
@@ -131,10 +129,11 @@ def test_mnist(l1, l2, eval_batch):
     print(f'dataset shape: {dataset.shape}')
     print(f'test data shape: {test_data.shape}')
 
-    with open('asdfasdf', 'a') as fout:
+    with open('res.csv', 'a') as fout:
         fout.write('mnist_test\n')
         for _ in range(5):
-            classifier = BinaryClassifier(dataset, label, test_data, test_label, device='py_cuda', eval_batch=10)
+            classifier = BinaryClassifier(dataset, label, test_data, test_label, device='py_cuda',
+                                          eval_batch=eval_batch)
 
             # train
             ts = time.time()
@@ -164,4 +163,3 @@ if __name__ == '__main__':
     print(f'eval_batch: {eval_batch}; l1: {l1}; l2: {l2}')
 
     test_mnist(l1, l2, eval_batch=eval_batch)
-

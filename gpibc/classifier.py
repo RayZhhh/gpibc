@@ -15,8 +15,8 @@ from .eval_pycuda import PyCudaEvaluator
 class BinaryClassifier:
     def __init__(self, train_set: np.ndarray, train_label: np.ndarray, test_set=None, test_label=None,
                  population_size=500, init_method='ramped_half_and_half', init_depth=(3, 6), max_program_depth=8,
-                 generations=50, elist_size=5, tournament_size=5, crossover_prob=0.6, mutation_prob=0.3,
-                 device='cuda', eval_batch=10, thread_per_block=128):
+                 generations=50, elist_size=5, tournament_size=7, crossover_prob=0.8, mutation_prob=0.19,
+                 device='py_cuda', eval_batch=10, thread_per_block=128):
         """
         Args:
             train_set        : dataset for training

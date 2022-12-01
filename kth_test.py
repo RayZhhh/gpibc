@@ -24,7 +24,6 @@ def create_dataset():
             image = Image.open('datasets/kth/cork_all/' + f).convert('L')  # 用PIL中的Image.open打开图像
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
-            image_arr = image_arr / 255
             image_arr = image_arr.astype(float)
             if num >= 113:
                 train_data = np.append(train_data, image_arr)
@@ -42,7 +41,6 @@ def create_dataset():
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr.astype(float)
-            image_arr = image_arr / 255
             if num >= 108:
                 train_data = np.append(train_data, image_arr)
                 train_label = np.append(train_label, [-1])
@@ -58,10 +56,10 @@ def run_kth_test(eval_batch):
     print(f'train data shape: {traind.shape}')
     print(f'test data shape: {testd.shape}')
 
-    with open('res_3050.csv', 'a') as fout:
+    with open('res.csv', 'a') as fout:
         fout.write('kth_test\n')
         for _ in range(5):
-            classifier = BinaryClassifier(traind, trainl, testd, testl, elist_size=0, device='cpu')
+            classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch)
             # train
             ts = time.time()
             classifier.train()

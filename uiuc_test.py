@@ -24,7 +24,6 @@ def create_dataset():
             image = Image.open('datasets/uiuc/pos/' + f).convert('L')  # 用PIL中的Image.open打开图像
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
-            # image_arr = image_arr / 255
             image_arr = image_arr.astype(float)
             if num >= 125:
                 train_data = np.append(train_data, image_arr)
@@ -58,10 +57,10 @@ def run_uiuc(eval_batch):
     print(f'train data shape: {traind.shape}')
     print(f'test data shape: {testd.shape}')
 
-    with open('res_3050.csv', 'a') as fout:
+    with open('res.csv', 'a') as fout:
         fout.write('uiuc_test\n')
         for _ in range(1):
-            classifier = BinaryClassifier(traind, trainl, testd, testl, elist_size=0, device='cpu')
+            classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch, device='py_cuda')
             # train
             ts = time.time()
             classifier.train()

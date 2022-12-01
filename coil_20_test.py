@@ -25,7 +25,6 @@ def create_dataset():
                 image = Image.open('datasets/coil-20/' + f).convert('L')  # 用PIL中的Image.open打开图像
                 image = image.resize((IH, IW))
                 image_arr = np.array(image)  # 转化成numpy数组
-                image_arr = image_arr / 255
                 image_arr = image_arr.astype(float)
 
                 if num >= 18:
@@ -45,7 +44,6 @@ def create_dataset():
                 image = image.resize((IH, IW))
                 image_arr = np.array(image)  # 转化成numpy数组
                 image_arr = image_arr.astype(float)
-                image_arr = image_arr / 255
                 if num >= 18:
                     train_data = np.append(train_data, image_arr)
                     train_label = np.append(train_label, [-1])
@@ -68,7 +66,7 @@ if __name__ == '__main__':
     with open('res.csv', 'a') as fout:
         fout.write('coil_20_test\n')
         for _ in range(5):
-            classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch, device='cpu', elist_size=0)
+            classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch, device='py_cuda')
             # train
             ts = time.time()
             classifier.train()
