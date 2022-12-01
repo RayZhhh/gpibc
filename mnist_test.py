@@ -108,7 +108,7 @@ def create_dataset_and_label(l1, l2):
     data1 = load_mnist_of_label(l1)
     data2 = load_mnist_of_label(l2)
     data_ret = np.append(data1, data2)
-    data_ret = data_ret / 255
+    # data_ret = data_ret / 255
     data_ret = data_ret.reshape(-1, 28, 28)
     label = np.array([1 for _ in range(len(data1))] + [-1 for _ in range(len(data2))])
     return data_ret, label
@@ -119,7 +119,7 @@ def create_test_set_and_label(l1, l2):
     data1 = load_test_set_of_label(l1)
     data2 = load_test_set_of_label(l2)
     data_ret = np.append(data1, data2)
-    data_ret = data_ret / 255
+    # data_ret = data_ret / 255
     data_ret = data_ret.reshape(-1, 28, 28)
     label = np.array([1 for _ in range(len(data1))] + [-1 for _ in range(len(data2))])
     return data_ret, label
@@ -131,29 +131,31 @@ def test_mnist(l1, l2, eval_batch):
     print(f'dataset shape: {dataset.shape}')
     print(f'test data shape: {test_data.shape}')
 
-    with open('res.csv', 'a') as fout:
+    with open('asdfasdf', 'a') as fout:
         fout.write('mnist_test\n')
-        for _ in range(10):
-            classifier = BinaryClassifier(dataset, label, test_data, test_label, eval_batch=eval_batch, device='cuda:0')
+        for _ in range(5):
+            classifier = BinaryClassifier(dataset, label, test_data, test_label, device='py_cuda', eval_batch=10)
 
             # train
             ts = time.time()
             classifier.train()
             dur = time.time() - ts
             print('training time: ', dur)
-
+            print('fit eval time: ', classifier.fitness_evaluation_time)
             # test
             classifier.run_test()
 
             # write result
-            fout.write(str(dur) + ',' + str(classifier.best_test_program.fitness) + '\n')
+            fout.write(str(dur) + ',' + str(classifier.best_test_program.fitness) + ',' + str(
+                classifier.fitness_evaluation_time) + '\n')
+
             del (classifier)
         fout.write('\n')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Args for mnist test.')
-    parser.add_argument('--batch', '-b', default=18)
+    parser.add_argument('--batch', '-b', default=5)
     parser.add_argument('--label1', '-l1', default=0)
     parser.add_argument('--label2', '-l2', default=1)
     eval_batch = int(parser.parse_args().batch)

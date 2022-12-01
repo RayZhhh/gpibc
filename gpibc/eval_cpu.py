@@ -48,6 +48,7 @@ def _g_std(region: ndarray) -> float:
 
 @jit(nopython=True)
 def _hist_eq(region: ndarray):
+    """Histogram Equalization"""
     buffer = np.zeros(shape=(len(region), len(region[0])), dtype=float)
     hist_buffer = [0] * (MAX_PIXEL_VALUE + 1)
     pixel_num = len(region) * len(region[0])
@@ -240,8 +241,6 @@ class CPUEvaluator:
         self.data = data
         self.label = label
         self.data_size = len(data)
-        # self.img_h = len(self.data[0])
-        # self.img_w = len(self.data[0][0])
 
     def evaluate_program(self, program: Program):
         correct = 0

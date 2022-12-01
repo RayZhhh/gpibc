@@ -3,6 +3,9 @@
 
 
 import math
+import time
+
+import numba
 from numba import cuda
 import numpy as np
 from .fset import *
@@ -132,7 +135,6 @@ def _g_std(stack, data_size, im_h, im_w, rx, ry, rh, rw, std_res, top):
         deviation /= rh * rw
         deviation = math.sqrt(deviation)
         std_res[__std_res_index(top, data_size)] = deviation
-    cuda.syncthreads()
 
 
 @cuda.jit(device=True)
@@ -144,7 +146,6 @@ def _sub(std_res, top, data_size):
         res1 = __std_res_value(std_res, top - 2, data_size)
         res2 = __std_res_value(std_res, top - 1, data_size)
         std_res[__std_res_index(top - 2, data_size)] = res1 - res2
-    cuda.syncthreads()
 
 
 @cuda.jit(device=True)
@@ -161,7 +162,6 @@ def _region(dataset, data_size, im_h, im_w, stack):
             for j in range(im_w):
                 d = __dataset_value(dataset, data_size, im_w, i, j)
                 stack[__pixel_index_in_stack(data_size, im_h, im_w, i, j)] = d
-    cuda.syncthreads()
 
 
 @cuda.jit(device=True)
@@ -196,7 +196,6 @@ def _lap(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
             for j in range(ry + 1, ry + rw - 1):
                 stack_index = __pixel_index_in_stack(data_size, im_h, im_w, i, j)
                 stack[stack_index] = __pixel_value_in_conv_buffer(buffer, data_size, im_h, im_w, i, j)
-    cuda.syncthreads()
 
 
 @cuda.jit(device=True)
@@ -235,7 +234,6 @@ def _gau1(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
             for j in range(ry + 1, ry + rw - 1):
                 stack_index = __pixel_index_in_stack(data_size, im_h, im_w, i, j)
                 stack[stack_index] = __pixel_value_in_conv_buffer(buffer, data_size, im_h, im_w, i, j)
-    cuda.syncthreads()
 
 
 @cuda.jit(device=True)
@@ -270,7 +268,6 @@ def _sobel_x(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
             for j in range(ry + 1, ry + rw - 1):
                 stack_index = __pixel_index_in_stack(data_size, im_h, im_w, i, j)
                 stack[stack_index] = __pixel_value_in_conv_buffer(buffer, data_size, im_h, im_w, i, j)
-    cuda.syncthreads()
 
 
 @cuda.jit(device=True)
@@ -305,7 +302,6 @@ def _sobel_y(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
             for j in range(ry + 1, ry + rw - 1):
                 stack_index = __pixel_index_in_stack(data_size, im_h, im_w, i, j)
                 stack[stack_index] = __pixel_value_in_conv_buffer(buffer, data_size, im_h, im_w, i, j)
-    cuda.syncthreads()
 
 
 @cuda.jit(device=True)
@@ -342,7 +338,6 @@ def _gau11(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
             for j in range(ry + 1, ry + rw - 1):
                 stack_index = __pixel_index_in_stack(data_size, im_h, im_w, i, j)
                 stack[stack_index] = __pixel_value_in_conv_buffer(buffer, data_size, im_h, im_w, i, j)
-    cuda.syncthreads()
 
 
 @cuda.jit(device=True)
@@ -379,21 +374,10 @@ def _gauxy(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
             for j in range(ry + 1, ry + rw - 1):
                 stack_index = __pixel_index_in_stack(data_size, im_h, im_w, i, j)
                 stack[stack_index] = __pixel_value_in_conv_buffer(buffer, data_size, im_h, im_w, i, j)
-    cuda.syncthreads()
 
 
 @cuda.jit(device=True)
 def _log1(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
-    """Perform LoG1 on image.
-        In this implementation, a thread is responsible for an image.
-        After LoG1 operation, rx += 2; ry += 2; rh -= 4; rw -= 4.
-
-        The LoG kernel is: [0,  0,  1,  0,  0]
-                           [0,  1,  2,  1,  0]
-                           [1,  2,-16,  2,  1]
-                           [0,  1,  2,  1,  0]
-                           [0,  0,  1,  0,  0].
-    """
     # image index this thread is response for
     img_index = cuda.blockDim.x * cuda.blockIdx.x + cuda.threadIdx.x
 
@@ -423,7 +407,50 @@ def _log1(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
             for j in range(ry + 2, ry + rw - 2):
                 stack_index = __pixel_index_in_stack(data_size, im_h, im_w, i, j)
                 stack[stack_index] = __pixel_value_in_conv_buffer(buffer, data_size, im_h, im_w, i, j)
-    cuda.syncthreads()
+
+
+@cuda.jit(device=True)
+def _log2(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
+    # image index this thread is response for
+    img_index = cuda.blockDim.x * cuda.blockIdx.x + cuda.threadIdx.x
+
+    if img_index < data_size:
+        for i in range(rx + 2, rx + rh - 2):
+            for j in range(ry + 2, ry + rw - 2):
+                sum = 0
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 2, j - 1) * 0.1
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 2, j) * 0.151
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 2, j + 1) * 0.1
+                #
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j - 2) * 0.1
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j - 1) * 0.292
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j) * 0.386
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j + 1) * 0.292
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i - 1, j + 2) * 0.1
+                #
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j - 2) * 0.151
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j - 1) * 0.386
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j) * 0.5
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j + 1) * 0.386
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j + 2) * 0.151
+                #
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j - 2) * 0.1
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j - 1) * 0.292
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j) * 0.386
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j + 1) * 0.292
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 1, j + 2) * 0.1
+                #
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 2, j - 1) * 0.1
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 2, j) * 0.151
+                sum -= __pixel_value_in_stack(stack, data_size, im_h, im_w, i + 2, j + 1) * 0.1
+                #
+                buffer[__pixel_conv_buffer_index(data_size, im_h, im_w, i, j)] = sum
+
+        # copy the result from buffer to stack
+        for i in range(rx + 2, rx + rh - 2):
+            for j in range(ry + 2, ry + rw - 2):
+                stack_index = __pixel_index_in_stack(data_size, im_h, im_w, i, j)
+                stack[stack_index] = __pixel_value_in_conv_buffer(buffer, data_size, im_h, im_w, i, j)
 
 
 @cuda.jit(device=True)
@@ -471,27 +498,6 @@ def _lbp(stack, data_size, im_h, im_w, rx, ry, rh, rw, buffer):
             for j in range(ry + 1, ry + rw - 1):
                 stack_index = __pixel_index_in_stack(data_size, im_h, im_w, i, j)
                 stack[stack_index] = __pixel_value_in_conv_buffer(buffer, data_size, im_h, im_w, i, j)
-    cuda.syncthreads()
-
-
-# -A buffer for Histogram based functions is allocated, which is structured as follows:
-#                  [<---- data_size ---->]
-#                  [0 0 0 0 0 0 0 0 0 0 .]
-#                  [1 1 1 1 1 1 1 1 1 1 .]
-#                  [2 2 2 2 2 2 2 2 2 2 .]
-#                  [3 3 3 3 3 3 3 3 3 3 .]
-#     program 0 => [4 4 4 4 4 4 4 4 4 4 .]
-#                  [5 5 5 5 5 5 5 5 5 5 .]
-#                  [.....................]
-#                  [---------256---------]
-#                  [0 0 0 0 0 0 0 0 0 0 .]
-#                  [1 1 1 1 1 1 1 1 1 1 .]
-#                  [2 2 2 2 2 2 2 2 2 2 .]
-#                  [3 3 3 3 3 3 3 3 3 3 .]
-#     program 1 => [4 4 4 4 4 4 4 4 4 4 .]
-#                  [5 5 5 5 5 5 5 5 5 5 .]
-#                  [.....................]
-#                  [---------256---------]
 
 
 @cuda.jit(device=True, inline=True)
@@ -648,8 +654,17 @@ def infer_population(name, rx, ry, rh, rw, plen, img_h, img_w, data_size, datase
         print('error: top != 1')
 
 
-class GPUPopulationEvaluator:
-    def __init__(self, data, label, eval_batch=1, thread_per_block=256):
+@numba.jit(nopython=True)
+def cal_accuracy(res, label, data_size, i) -> float:
+    correct = 0
+    for j in range(data_size):
+        if label[j] > 0 and res[i][j] > 0 or label[j] < 0 and res[i][j] < 0:
+            correct += 1
+    return correct / data_size
+
+
+class NumbaCudaEvaluator:
+    def __init__(self, data, label, eval_batch=1, thread_per_block=128):
         """
         Args:
             data            : train-set or test-set
@@ -668,11 +683,11 @@ class GPUPopulationEvaluator:
         self.max_program_len = MAX_PROGRAM_LEN
 
         # cuda_device side arrays
-        self._ddataset = cuda.to_device(self.data.reshape(self.data_size, -1).T.reshape(1, -1).squeeze())
-        self._dstack = self._allocate_device_stack()
-        self._dhist = self._allocate_device_hist_buffer()
-        self._dres = self._allocate_device_res_buffer()
-        self._dconv_buffer = self._allocate_device_conv_buffer()
+        self._d_dataset = cuda.to_device(self.data.reshape(self.data_size, -1).T.reshape(1, -1).squeeze())
+        self._d_stack = self._allocate_device_stack()
+        self._d_hist = self._allocate_device_hist_buffer()
+        self._d_res = self._allocate_device_res_buffer()
+        self._d_conv_buffer = self._allocate_device_conv_buffer()
 
     def _allocate_device_stack(self):
         return cuda.device_array(self.data_size * self.img_h * self.img_w * self.eval_batch, float)
@@ -721,19 +736,16 @@ class GPUPopulationEvaluator:
 
         # launch kernel
         grid = (int((self.data_size - 1 + self.thread_per_block) / self.thread_per_block), cur_batch_size)
+
         infer_population[grid, self.thread_per_block](name, rx, ry, rh, rw, plen, self.img_h, self.img_w,
-                                                      self.data_size, self._ddataset, self._dstack, self._dconv_buffer,
-                                                      self._dhist, self._dres)
+                                                      self.data_size, self._d_dataset, self._d_stack, self._d_conv_buffer,
+                                                      self._d_hist, self._d_res)
         cuda.synchronize()
 
         # get accuracy
-        res = self._dres.copy_to_host().reshape(self.eval_batch, -1)
+        res = self._d_res.copy_to_host().reshape(self.eval_batch, -1)
         for i in range(cur_batch_size):
-            correct = 0
-            for j in range(self.data_size):
-                if self.label[j] > 0 and res[i][j] > 0 or self.label[j] < 0 and res[i][j] < 0:
-                    correct += 1
-            pop_batch[i].fitness = correct / self.data_size
+            pop_batch[i].fitness = cal_accuracy(res, self.label, self.data_size, i)
 
     def evaluate_population(self, population: List[Program]):
         """Evaluate fitness for a whole population.
@@ -742,5 +754,4 @@ class GPUPopulationEvaluator:
         """
         for i in range(0, len(population), self.eval_batch):
             last_pos = min(i + self.eval_batch, len(population))
-            # print(f'[{i} => {last_pos}]')
             self._fitness_evaluate_for_a_batch(population[i:last_pos])

@@ -23,7 +23,7 @@ def create_dataset():
             image = Image.open('datasets/jaffe/happiness/' + f).convert('L')  # 用PIL中的Image.open打开图像
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
-            image_arr = image_arr / 255
+            # image_arr = image_arr / 255
             image_arr = image_arr.astype(float)
             if num >= 8:
                 train_data = np.append(train_data, image_arr)
@@ -41,7 +41,7 @@ def create_dataset():
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr.astype(float)
-            image_arr = image_arr / 255
+            # image_arr = image_arr / 255
             if num >= 7:
                 train_data = np.append(train_data, image_arr)
                 train_label = np.append(train_label, [-1])
@@ -57,21 +57,22 @@ if __name__ == '__main__':
     print(f'train data shape: {traind.shape}')
     print(f'test data shape: {testd.shape}')
 
-    with open('res.csv', 'a') as fout:
+    with open('asdf.csv', 'a') as fout:
         fout.write('jaffe_test\n')
-        for _ in range(10):
-            classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=250, population_size=500, device='cuda:0')
-
+        for _ in range(5):
+            classifier = BinaryClassifier(traind, trainl, testd, testl, device='cuda:0', eval_batch=250)
             # train
             ts = time.time()
             classifier.train()
             dur = time.time() - ts
             print('training time: ', dur)
-
+            print('fit eval time: ', classifier.fitness_evaluation_time)
             # test
             classifier.run_test()
 
             # write result
-            fout.write(str(dur) + ',' + str(classifier.best_test_program.fitness) + '\n')
+            fout.write(str(dur) + ',' + str(classifier.best_test_program.fitness) + ',' + str(
+                classifier.fitness_evaluation_time) + '\n')
+
             del(classifier)
         fout.write('\n')

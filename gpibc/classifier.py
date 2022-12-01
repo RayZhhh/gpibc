@@ -1,20 +1,22 @@
 import copy
 import random
+import time
 
 import numpy as np
 from numba import cuda
 
 from gpibc.program import Program
 from gpibc.fset import *
-from .eval_gpu import GPUPopulationEvaluator
+from .eval_gpu import NumbaCudaEvaluator
 from .eval_cpu import CPUEvaluator
+from .eval_pycuda import PyCudaEvaluator
 
 
 class BinaryClassifier:
     def __init__(self, train_set: np.ndarray, train_label: np.ndarray, test_set=None, test_label=None,
-                 population_size=500, init_method='ramped_half_and_half', init_depth=(3, 6), max_program_depth=10,
+                 population_size=500, init_method='ramped_half_and_half', init_depth=(3, 6), max_program_depth=8,
                  generations=50, elist_size=5, tournament_size=5, crossover_prob=0.6, mutation_prob=0.3,
-                 device='cuda:0', eval_batch=100):
+                 device='cuda', eval_batch=10, thread_per_block=128):
         """
         Args:
             train_set        : dataset for training
@@ -33,6 +35,9 @@ class BinaryClassifier:
             device           : the cuda_device on which executes fitness evaluation
             eval_batch       : the number of program to evaluate simultaneously, valid when eval_method='population'
         """
+        if device not in ['py_cuda', 'numba_cuda', 'cpu']:
+            raise RuntimeError('Device must be "py_cuda" or "numba_cuda" or "cpu".')
+
         self.train_set = train_set
         self.train_label = train_label
 
@@ -57,23 +62,19 @@ class BinaryClassifier:
         self.tournament_size = tournament_size
         self.crossover_prob = crossover_prob
         self.mutation_prob = mutation_prob
-        self.device = device.split(':')[0]
-
-        if self.device == 'cuda':
-            self.device_id = int(device.split(':')[1])
-
+        self.device = device
         self.eval_batch = eval_batch
+        self.thread_per_block = thread_per_block
 
-        if self.device == 'cuda' and not cuda.is_available():
+        if self.device in ['py_cuda', 'numba_cuda'] and not cuda.is_available():
             raise RuntimeError('Do not support CUDA on your cuda_device.')
 
-        if self.device == 'cuda':
-            self.evaluator = GPUPopulationEvaluator(self.train_set, self.train_label, self.eval_batch)
-            cuda.select_device(self.device_id)
+        if self.device == 'numba_cuda':
+            self.evaluator = NumbaCudaEvaluator(self.train_set, self.train_label, self.eval_batch, thread_per_block)
 
             # evaluator for the test set
             if self.test_set is not None:
-                self.test_evaluator = GPUPopulationEvaluator(self.test_set, self.test_label)
+                self.test_evaluator = NumbaCudaEvaluator(self.test_set, self.test_label)
 
         elif self.device == 'cpu':
             self.evaluator = CPUEvaluator(self.train_set, self.train_label)
@@ -83,7 +84,11 @@ class BinaryClassifier:
                 self.test_evaluator = CPUEvaluator(self.test_set, self.test_label)
 
         else:
-            raise RuntimeError('Do not support such device.')
+            self.evaluator = PyCudaEvaluator(self.train_set, self.train_label, self.eval_batch, thread_per_block)
+
+            # evaluator for the test set
+            if self.test_set is not None:
+                self.test_evaluator = PyCudaEvaluator(self.test_set, self.test_label)
 
         # population properties
         self.population: List[Program] = []
@@ -92,6 +97,10 @@ class BinaryClassifier:
         self.best_fitness: float = ...
         #
         self.best_test_program: Program = ...
+
+        # performance
+        self.fitness_evaluation_time = 0
+        self.training_time = 0
 
     def population_init(self):
         if self.init_method == 'full':
@@ -151,13 +160,18 @@ class BinaryClassifier:
         print('')
 
     def train(self):
+        training_start = time.time()
+        self.training_time = 0
+        self.fitness_evaluation_time = 0
         self.best_program_in_each_gen = []
 
         # population initialization
         self.population_init()
 
         # evaluate fitness for the initial population
+        fit_eval_start = time.time()
         self.evaluator.evaluate_population(self.population)
+        self.fitness_evaluation_time += time.time() - fit_eval_start
 
         # update
         self._update_generation_properties()
@@ -185,11 +199,15 @@ class BinaryClassifier:
             self.population = new_population
 
             # fitness evaluation
+            fit_eval_start = time.time()
             self.evaluator.evaluate_population(self.population)
+            self.fitness_evaluation_time += time.time() - fit_eval_start
 
             # update
             self._update_generation_properties()
             self._print_population_properties(gen=iter_times)
+        # record training time
+        self.training_time = time.time() - training_start
 
     def run_test(self):
         self.test_evaluator.evaluate_population(self.best_program_in_each_gen)
@@ -197,3 +215,4 @@ class BinaryClassifier:
         print(f'[ =========Run Test======== ]')
         print(f'[ Best program in test data ] {self.best_test_program}')
         print(f'[ Accuracy                  ] {self.best_test_program.fitness}')
+        print()
