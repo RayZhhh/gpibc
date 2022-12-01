@@ -23,7 +23,7 @@ MAX_STACK_SIZE = 10
 
 # device side kernels
 # these functions are implemented by CUDA C/C++ layer
-PYCUDA_EVAL_MODULE = SourceModule(source="""
+PYCUDA_EVAL_MODULE = SourceModule(source=r"""
 enum F {
     Region_S, Region_R, G_Std, Hist_Eq, Gau1, Gau11, GauXY, Lap, Sobel_X, Sobel_Y, LoG1, LoG2, LBP, HOG, Sub
 };
