@@ -1,15 +1,19 @@
 import gzip
+import os
+import sys
 import time
 
 import numpy as np
 import argparse
 
-from gpibc.classifier import BinaryClassifier
+import utils
+sys.path.append('../')
+from gpibc.classifier import BinaryClassifier, BinaryClassifierWithInstanceSelection
 
-data_path = 'datasets/mnist/train-images-idx3-ubyte.gz'
-label_path = 'datasets/mnist/train-labels-idx1-ubyte.gz'
-test_data_path = 'datasets/mnist/t10k-images-idx3-ubyte.gz'
-test_label_path = 'datasets/mnist/t10k-labels-idx1-ubyte.gz'
+data_path = '../datasets/mnist/train-images-idx3-ubyte.gz'
+label_path = '../datasets/mnist/train-labels-idx1-ubyte.gz'
+test_data_path = '../datasets/mnist/t10k-images-idx3-ubyte.gz'
+test_label_path = '../datasets/mnist/t10k-labels-idx1-ubyte.gz'
 
 
 def _load_img():
@@ -38,8 +42,8 @@ def _load_test_label():
     return data
 
 
-datasets_path = 'datasets/mnist/img_'
-test_set_path = 'datasets/mnist/test_'
+datasets_path = '../datasets/mnist/img_'
+test_set_path = '../datasets/mnist/test_'
 
 
 def _create_mnist_file():
@@ -123,16 +127,17 @@ def create_test_set_and_label(l1, l2):
     return data_ret, label
 
 
-def test_mnist(l1, l2, eval_batch):
+def test_mnist(l1, l2, eval_batch, device):
     dataset, label = create_dataset_and_label(l1, l2)
+    dataset, label = utils.shuffle_dataset_and_label(dataset, label)
     test_data, test_label = create_test_set_and_label(l1, l2)
     print(f'dataset shape: {dataset.shape}')
     print(f'test data shape: {test_data.shape}')
 
-    with open('res.csv', 'a') as fout:
+    with open('IS_res.csv', 'a') as fout:
         fout.write('mnist_test\n')
-        for _ in range(5):
-            classifier = BinaryClassifier(dataset, label, test_data, test_label, device='py_cuda',
+        for _ in range(10):
+            classifier = BinaryClassifierWithInstanceSelection(dataset, label, test_data, test_label, device=device,
                                           eval_batch=eval_batch)
 
             # train
@@ -157,9 +162,11 @@ if __name__ == '__main__':
     parser.add_argument('--batch', '-b', default=5)
     parser.add_argument('--label1', '-l1', default=0)
     parser.add_argument('--label2', '-l2', default=1)
+    parser.add_argument('--device', '-d', default='py_cuda')
+    device = parser.parse_args().device
     eval_batch = int(parser.parse_args().batch)
     l1 = int(parser.parse_args().label1)
     l2 = int(parser.parse_args().label2)
     print(f'eval_batch: {eval_batch}; l1: {l1}; l2: {l2}')
 
-    test_mnist(l1, l2, eval_batch=eval_batch)
+    test_mnist(l1, l2, eval_batch=eval_batch, device=device)

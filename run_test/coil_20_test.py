@@ -4,6 +4,7 @@ import time
 from PIL import Image
 import os
 
+import utils
 from gpibc.classifier import BinaryClassifier
 import numpy as np
 
@@ -57,16 +58,20 @@ def create_dataset():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Args for mnist test.')
     parser.add_argument('--batch', '-b', default=125)
+    parser.add_argument('--device', '-d', default='py_cuda')
+    device = parser.parse_args().device
     eval_batch = int(parser.parse_args().batch)
 
     traind, trainl, testd, testl = create_dataset()
+    traind, trainl = utils.shuffle_dataset_and_label(traind, trainl)
+
     print(f'train data shape: {traind.shape}')
     print(f'test data shape: {testd.shape}')
 
     with open('res.csv', 'a') as fout:
         fout.write('coil_20_test\n')
-        for _ in range(5):
-            classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch, device='py_cuda')
+        for _ in range(10):
+            classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch, device=device)
             # train
             ts = time.time()
             classifier.train()

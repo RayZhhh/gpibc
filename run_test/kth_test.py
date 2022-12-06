@@ -4,6 +4,7 @@ import time
 from PIL import Image
 import os
 
+import utils
 from gpibc.classifier import BinaryClassifier
 import numpy as np
 
@@ -51,21 +52,24 @@ def create_dataset():
     return train_data.reshape(-1, IH, IW), train_label, test_data.reshape(-1, IH, IW), test_label
 
 
-def run_kth_test(eval_batch):
+def run_kth_test(eval_batch, device):
     traind, trainl, testd, testl = create_dataset()
+    traind, trainl = utils.shuffle_dataset_and_label(traind, trainl)
+
     print(f'train data shape: {traind.shape}')
     print(f'test data shape: {testd.shape}')
 
     with open('res.csv', 'a') as fout:
         fout.write('kth_test\n')
-        for _ in range(5):
-            classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch)
+        for _ in range(10):
+            classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch, device=device)
             # train
             ts = time.time()
             classifier.train()
             dur = time.time() - ts
             print('training time: ', dur)
             print('fit eval time: ', classifier.fitness_evaluation_time)
+            print('cuda kernel time: ', classifier.cuda_kernel_time)
             # test
             classifier.run_test()
 
@@ -80,5 +84,7 @@ def run_kth_test(eval_batch):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Args for mnist test.')
     parser.add_argument('--batch', '-b', default=20)
+    parser.add_argument('--device', '-d', default='py_cuda')
+    device = parser.parse_args().device
     eval_batch = int(parser.parse_args().batch)
-    run_kth_test(eval_batch=eval_batch)
+    run_kth_test(eval_batch=eval_batch, device=device)
