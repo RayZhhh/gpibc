@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+import time
 from typing import List
 from gpibc.program import Program
 from pycuda import driver
@@ -668,10 +668,10 @@ _SIZE_INT = 4
 
 
 @jit(nopython=True)
-def cal_accuracy(res, label, data_size, i) -> float:
+def _cal_accuracy(res, label, data_size: int, program_no: int) -> float:
     correct = 0
     for j in range(data_size):
-        predict = res[i * data_size * MAX_STACK_SIZE + j]
+        predict = res[program_no * data_size * MAX_STACK_SIZE + j]
         if label[j] < 0 and predict < 0 or label[j] > 0 and predict > 0:
             correct += 1
     return correct / data_size
@@ -720,6 +720,9 @@ class PyCudaEvaluator:
         # allocate memory space for program
         self._allocate_program_buffer()
 
+        # profiling
+        self.cuda_kernel_time = 0
+
     def _transfer_dataset(self):
         data_ = self.data.reshape(self.data_size, -1).T
         data_ = data_.reshape(-1).astype(np.float32)
@@ -767,7 +770,7 @@ class PyCudaEvaluator:
             plen[i] = len(program)
             for j in range(len(program)):
                 name[i * MAX_PROGRAM_LEN + j] = program[j].name
-                if program[j].is_terminal():
+                if program[j].is_terminal_node():
                     rx[i * MAX_PROGRAM_LEN + j] = program[j].rx
                     ry[i * MAX_PROGRAM_LEN + j] = program[j].ry
                     rh[i * MAX_PROGRAM_LEN + j] = program[j].rh
@@ -784,18 +787,21 @@ class PyCudaEvaluator:
         # launch kernel
         grid = (int((self.data_size - 1 + self.thread_per_block) / self.thread_per_block), cur_batch_size)
         block = (self.thread_per_block, 1, 1)
+
+        kernel_start = time.time()
         infer_population_kernel(self._d_name, self._d_rx, self._d_ry, self._d_rh, self._d_rw, self._d_plen,
                                 np.int32(self.img_h), np.int32(self.img_w), np.int32(self.data_size),
                                 self._d_dataset, self._d_stack, self._d_conv_buffer, self._d_hist_buffer,
                                 self._d_std_res, grid=grid, block=block)
         driver.Context.synchronize()
+        self.cuda_kernel_time += time.time() - kernel_start
 
         # get accuracy
         res = np.zeros(MAX_STACK_SIZE * self.eval_batch * self.data_size, np.float32)
         driver.memcpy_dtoh(res, self._d_std_res)
 
         for i in range(cur_batch_size):
-            pop_batch[i].fitness = cal_accuracy(res, self.label, self.data_size, i)
+            pop_batch[i].fitness = _cal_accuracy(res, self.label, self.data_size, i)
 
     def evaluate_population(self, population: List[Program]):
         """Evaluate fitness for a whole population.

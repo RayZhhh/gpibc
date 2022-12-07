@@ -5,7 +5,6 @@ import random
 
 from .fset import *
 
-
 # =================================================================================
 # Multi-Layer GP tree structure for binary image classification.
 # =================================================================================
@@ -28,28 +27,8 @@ terminal_set = [Region_S, Region_R]
 inter_func_set = [Hist_Eq, Gau1, Lap, Sobel_X, Sobel_Y, LoG1, LoG2, LBP, Gau11, GauXY]
 
 
-def __rand_term() -> int:
-    """Sample a function from Region_S and Region_R."""
-    return random.sample(population=terminal_set, k=1)[0]
-
-
-def __rand_feature_construct(sub_rate=0.3) -> int:
-    """Sample a function from Sub and G_Std.
-    Args:
-        sub_rate: the probability to generate Sub function.
-    """
-    # rand_float = random.random()
-    # return Sub if rand_float < sub_rate else G_Std
-    return random.sample(population=feature_construct_set, k=1)[0]
-
-
-def __rand_inter_func() -> int:
-    """Sample a function from feature extraction functions, exclude G_Std."""
-    return random.sample(population=inter_func_set, k=1)[0]
-
-
 class _Node:
-    def __init__(self, name: int, rx=0, ry=0, rh=0, rw=0):
+    def __init__(self, name=0, rx=0, ry=0, rh=0, rw=0):
         self.name = name
         self.rx = rx
         self.ry = ry
@@ -61,51 +40,52 @@ class _Node:
 
     def __str__(self):
         return to_str(self.name) + '(' + str(self.rx) + ', ' + str(self.ry) + ', ' \
-               + str(self.rh) + ', ' + str(self.rw) + ')' if self.is_terminal() else to_str(self.name)
+               + str(self.rh) + ', ' + str(self.rw) + ')' if self.is_terminal_node() else to_str(self.name)
 
-    def is_binary_function(self):
-        return is_binary_function(self.name)
+    def is_binary_function_node(self) -> bool:
+        return self.name == Sub
 
-    def is_unary_function(self):
-        return is_unary_function(self.name)
+    def is_unary_function_node(self) -> bool:
+        return self.name != Sub
 
-    def is_terminal(self):
-        return is_terminal(self.name)
+    def is_terminal_node(self) -> bool:
+        return self.name == Region_R or self.name == Region_S
 
+    def rand_terminal_node(self, img_h, img_w):
+        """Create a random terminal node with respect to the height and width of the image."""
+        if img_h < 20 or img_w < 20:
+            raise RuntimeError('The height and width must be larger or equal to 20.')
 
-def _rand_terminal_node(img_h, img_w) -> _Node:
-    """Create a random terminal node with respect to the height and width of the image."""
-    if img_h < 20 or img_w < 20:
-        raise RuntimeError('The height and width must be larger or equal to 20.')
+        reg_x = random.randint(0, img_h - 20)
+        reg_y = random.randint(0, img_w - 20)
 
-    reg_x = random.randint(0, img_h - 20)
-    reg_y = random.randint(0, img_w - 20)
+        if random.sample(population=terminal_set, k=1)[0] == Region_S:
+            max_side_len = min(img_h - reg_x, img_w - reg_y)
+            side_len = random.randint(20, max_side_len)
+            self.name = Region_S
+            self.rx = reg_x
+            self.ry = reg_y
+            self.rh = side_len
+            self.rw = side_len
+        else:
+            reg_h = random.randint(20, img_h - reg_x)
+            reg_w = random.randint(20, img_w - reg_y)
+            self.name = Region_R
+            self.rx = reg_x
+            self.ry = reg_y
+            self.rh = reg_h
+            self.rw = reg_w
 
-    if __rand_term() == Region_S:
-        max_side_len = min(img_h - reg_x, img_w - reg_y)
-        side_len = random.randint(20, max_side_len)
-        node = _Node(name=Region_S, rx=reg_x, ry=reg_y, rh=side_len, rw=side_len)
-        return node
+    def rand_inter_func_node(self):
+        name = random.sample(population=inter_func_set, k=1)[0]
+        self.name = name
 
-    else:
-        reg_h = random.randint(20, img_h - reg_x)
-        reg_w = random.randint(20, img_w - reg_y)
-        node = _Node(name=Region_R, rx=reg_x, ry=reg_y, rh=reg_h, rw=reg_w)
-        return node
-
-
-def _rand_inter_func_node() -> _Node:
-    name = __rand_inter_func()
-    return _Node(name=name)
-
-
-def _rand_feature_construct_node() -> _Node:
-    name = __rand_feature_construct()
-    return _Node(name=name)
+    def rand_feature_construct_node(self):
+        name = random.sample(population=feature_construct_set, k=1)[0]
+        self.name = name
 
 
 class _TreeGenerator:
-
     class TreeNode:
         def __init__(self, node=None, left=None, right=None):
             self.node = node
@@ -150,24 +130,25 @@ class _TreeGenerator:
             return tree_node
 
         if depth == 1:
-            terminal = _rand_terminal_node(img_h=self.img_h, img_w=self.img_w)
+            terminal = _Node()
+            terminal.rand_terminal_node(self.img_h, self.img_w)
             tree_node = self.TreeNode(node=terminal)
             return tree_node
 
         if parent_node == Sub:
-            node = _rand_feature_construct_node()
+            node = _Node()
+            node.rand_feature_construct_node()
             tree_node = self.TreeNode(node=node)
             if node.name == G_Std:
                 tree_node.left = self._create_full_tree(depth - 1, G_Std)
                 return tree_node
-
             else:
                 tree_node.left = self._create_full_tree(depth - 1, Sub)
                 tree_node.right = self._create_full_tree(depth - 1, Sub)
                 return tree_node
-
         else:
-            node = _rand_inter_func_node()
+            node = _Node()
+            node.rand_inter_func_node()
             tree_node = self.TreeNode(node=node)
             tree_node.left = self._create_full_tree(depth - 1, node.name)
             return tree_node
@@ -186,12 +167,14 @@ class _TreeGenerator:
             return tree_node
 
         if depth == 1:
-            terminal = _rand_terminal_node(img_h=self.img_h, img_w=self.img_w)
+            terminal = _Node()
+            terminal.rand_terminal_node(self.img_h, self.img_w)
             tree_node = self.TreeNode(node=terminal)
             return tree_node
 
         if parent_node is Sub:
-            node = _rand_feature_construct_node()
+            node = _Node()
+            node.rand_feature_construct_node()
             tree_node = self.TreeNode(node=node)
             if node.name == G_Std:
                 tree_node.left = self._create_growth_tree(depth - 1, G_Std)
@@ -203,19 +186,15 @@ class _TreeGenerator:
                 return tree_node
 
         else:
-            if return_rate is None:
-                func_set = terminal_set + inter_func_set
-                rand_func = random.sample(population=func_set, k=1)[0]
-                node = _Node(name=rand_func)
+            if random.random() < return_rate:
+                node = _Node()
+                node.rand_terminal_node(self.img_h, self.img_w)
             else:
-                if random.random() < return_rate:
-                    node = _rand_terminal_node(self.img_h, self.img_w)
-                else:
-                    node = _rand_inter_func_node()
-
+                node = _Node()
+                node.rand_inter_func_node()
             tree_node = self.TreeNode(node=node)
 
-            if node.is_terminal():
+            if node.is_terminal_node():
                 return tree_node
 
             tree_node.left = self._create_growth_tree(depth - 1, node.name)
@@ -228,9 +207,9 @@ def _subtree_index(prefix: List[_Node], start_pos) -> Tuple[int, int]:
     end = start_pos
     while end < len(prefix):
         node = prefix[end]
-        if node.is_binary_function():
+        if node.is_binary_function_node():
             func_count += 1
-        elif node.is_terminal():
+        elif node.is_terminal_node():
             term_count += 1
         if func_count + 1 == term_count:
             break
@@ -290,9 +269,9 @@ class Program:
     def get_depth_of_program(self):
         s = []
         for node in reversed(self.prefix):
-            if node.is_terminal():
+            if node.is_terminal_node():
                 s.append(1)
-            elif node.is_binary_function():
+            elif node.is_binary_function_node():
                 depth0 = s.pop()
                 depth1 = s.pop()
                 s.append(max(depth0, depth1) + 1)
@@ -314,10 +293,12 @@ class Program:
             root_indexes = [i for i in range(len(donor)) if donor[i].name == Sub or donor[i].name == G_Std]
             rand_start_pos = random.sample(population=root_indexes, k=1)[0]
             donor_start, donor_end = _subtree_index(prefix=dprefix, start_pos=rand_start_pos)
+
         elif root_func == G_Std:
             root_indexes = [i for i in range(len(donor)) if donor[i].name == G_Std]
             rand_start_pos = random.sample(population=root_indexes, k=1)[0]
             donor_start, donor_end = _subtree_index(prefix=dprefix, start_pos=rand_start_pos)
+
         else:
             root_indexes = [i for i in range(len(donor)) if donor[i].name != Sub and donor[i].name != G_Std]
             rand_start_pos = random.sample(population=root_indexes, k=1)[0]
@@ -336,10 +317,14 @@ class Program:
                          if self.prefix[i].name != Sub and self.prefix[i].name != G_Std]
         pos = random.sample(population=point_indexes, k=1)[0]
 
-        if self[pos].is_terminal():
-            self.prefix[pos] = _rand_terminal_node(self.img_h, self.img_w)
+        if self[pos].is_terminal_node():
+            node = _Node()
+            node.rand_terminal_node(self.img_h, self.img_w)
+            self.prefix[pos] = node
         else:
-            self.prefix[pos] = _rand_inter_func_node()
+            node = _Node()
+            node.rand_inter_func_node()
+            self.prefix[pos] = node
 
     def subtree_mutation(self):
         gener = _TreeGenerator(depth=self._init_depth, img_h=self.img_h, img_w=self.img_w)

@@ -77,7 +77,7 @@ def run_cifar(l1, l2, eval_batch, device, ins_sel):
     print(f'data.shape: {data.shape}')
     print(f'test_data.shape: {test_data.shape}')
 
-    with open('ISS_res.csv', 'a') as fout:
+    with open('IS_res.csv', 'a') as fout:
         fout.write('cifar_test\n')
         for _ in range(10):
             classifier = BinaryClassifierWithInstanceSelection(data, label, test_data, test_label, device=device, eval_batch=eval_batch)

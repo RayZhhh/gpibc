@@ -5,12 +5,14 @@ import numpy as np
 import argparse
 
 import utils
+import sys
+sys.path.append('./')
 from gpibc.classifier import BinaryClassifier, BinaryClassifierWithInstanceSelection
 
-data_path = 'datasets/mnist/train-images-idx3-ubyte.gz'
-label_path = 'datasets/mnist/train-labels-idx1-ubyte.gz'
-test_data_path = 'datasets/mnist/t10k-images-idx3-ubyte.gz'
-test_label_path = 'datasets/mnist/t10k-labels-idx1-ubyte.gz'
+data_path = '../datasets/mnist/train-images-idx3-ubyte.gz'
+label_path = '../datasets/mnist/train-labels-idx1-ubyte.gz'
+test_data_path = '../datasets/mnist/t10k-images-idx3-ubyte.gz'
+test_label_path = '../datasets/mnist/t10k-labels-idx1-ubyte.gz'
 
 
 def _load_img():
@@ -131,10 +133,10 @@ def test_mnist(l1, l2, eval_batch, device):
     print(f'dataset shape: {dataset.shape}')
     print(f'test data shape: {test_data.shape}')
 
-    with open('res.csv', 'a') as fout:
+    with open('../res.csv', 'a') as fout:
         fout.write('mnist_test\n')
         for _ in range(10):
-            classifier = BinaryClassifierWithInstanceSelection(dataset, label, test_data, test_label, device=device,
+            classifier = BinaryClassifier(dataset, label, test_data, test_label, device=device,
                                           eval_batch=eval_batch)
 
             # train

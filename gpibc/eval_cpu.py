@@ -1,4 +1,6 @@
 # This file defines GP operators for CPU.
+import copy
+import sys
 
 import numpy as np
 from numpy import ndarray
@@ -42,6 +44,8 @@ def __conv2d_5x5(region: ndarray, kernel) -> ndarray:
 
 @jit(nopython=True)
 def _g_std(region: ndarray) -> float:
+    if region.size == 0:
+        return 0
     std = float(np.std(region))
     return std
 
@@ -120,7 +124,15 @@ def _gau1(region):
 
 @jit(nopython=True)
 def _log1(region):
-    kernel = [[0, 0, 1, 0, 0], [0, 1, 2, 1, 0], [1, 2, -16, 2, 1], [0, 1, 2, 1, 0], [0, 0, 1, 0, 0]]
+    kernel = [[0.109, 0.246, 0.270, 0.246, 0.109], [0.246, 0, -0.606, 0, 0.246], [0.270, -0.606, -2., -0.606, 0.270],
+              [0.246, 0, -0.606, 0, 0.246], [0.109, 0.246, 0.270, 0.246, 0.109]]
+    return __conv2d_5x5(region, kernel)
+
+
+@jit(nopython=True)
+def _log2(region):
+    kernel = [[0, -0.1, -0.151, -0.1, 0], [-0.1, -0.292, -0.386, -0.292, -0.1], [-0.151, -0.386, -0.5, -0.386, -0.151],
+              [-0.1, -0.292, -0.386, -0.292, -0.1], [0, -0.1, -0.151, -0.1, 0]]
     return __conv2d_5x5(region, kernel)
 
 
@@ -136,8 +148,10 @@ def _lbp(region):
                                                                    [128,  C,  8]
                                                                    [ 64, 32, 16]
     """
+    buffer = np.zeros(shape=(len(region), len(region[0])), dtype=float)
+
     for i in range(1, len(region) - 1):
-        for j in range(1, len(region) - 1):
+        for j in range(1, len(region[0]) - 1):
             sum = 0
             center_px = region[i][j]
             if region[i - 1][j - 1] >= center_px:
@@ -156,7 +170,8 @@ def _lbp(region):
                 sum += 64
             if region[i][j - 1] >= center_px:
                 sum += 128
-            region[i][j] = sum
+            buffer[i][j] = sum
+    return buffer
 
 
 @jit(nopython=True)
@@ -193,36 +208,66 @@ def _infer_program(program: Program, img: ndarray) -> float:
 
         if node.name == Region_R or node.name == Region_S:
             region = img[rx:rx + rh, ry:ry + rw]
+            if region.size == 0:
+                raise RuntimeError('00000__??????')
 
         elif node.name == G_Std:
+            try:
+                __reg = _g_std(region)
+            except BaseException:
+                print(region)
             stack.append(_g_std(region))
 
         elif node.name == Hist_Eq:
             region = _hist_eq(region)
+            # if region.size == 0:
+            #     raise RuntimeError('00000__??????')
 
         elif node.name == Gau1:
             region = _gau1(region)
+            # if region.size == 0:
+            #     raise RuntimeError('00000__??????')
 
         elif node.name == Gau11:
             region = _gau11(region)
+            # if region.size == 0:
+            #     raise RuntimeError('00000__??????')
 
         elif node.name == GauXY:
             region = _gauxy(region)
+            # if region.size == 0:
+            #     raise RuntimeError('00000__??????')
 
         elif node.name == Lap:
             region = _lap(region)
+            # if region.size == 0:
+            #     raise RuntimeError('00000__??????')
 
         elif node.name == Sobel_X:
             region = _sobel_x(region)
+            # if region.size == 0:
+            #     raise RuntimeError('00000__??????')
 
         elif node.name == Sobel_Y:
             region = _sobel_y(region)
+            # if region.size == 0:
+            #     raise RuntimeError('00000__??????')
 
         elif node.name == LoG1:
             region = _log1(region)
+            # if region.size == 0:
+            #     print(program)
+            #     raise RuntimeError('00000__??????')
 
         elif node.name == LoG2:
-            pass
+            region = _log2(region)
+            # if region.size == 0:
+            #     print(program)
+            #     raise RuntimeError('00000__??????')
+
+
+        elif node.name == LBP:
+            region = _lbp(region)
 
         elif node.name == HOG:
             pass

@@ -5,6 +5,8 @@ from PIL import Image
 import os
 
 import utils
+import sys
+sys.path.append('../')
 from gpibc.classifier import BinaryClassifier
 import numpy as np
 
@@ -19,10 +21,10 @@ def create_dataset():
     test_label = np.array([])
 
     # load label [1]
-    for root, ds, fs in os.walk('datasets/jaffe/happiness'):
+    for root, ds, fs in os.walk('../datasets/jaffe/happiness'):
         num = 0
         for f in fs:
-            image = Image.open('datasets/jaffe/happiness/' + f).convert('L')  # 用PIL中的Image.open打开图像
+            image = Image.open('../datasets/jaffe/happiness/' + f).convert('L')  # 用PIL中的Image.open打开图像
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr.astype(float)
@@ -35,10 +37,10 @@ def create_dataset():
             num += 1
 
     # load label [-1]
-    for root, ds, fs in os.walk('datasets/jaffe/surprise'):
+    for root, ds, fs in os.walk('../datasets/jaffe/surprise'):
         num = 0
         for f in fs:
-            image = Image.open('datasets/jaffe/surprise/' + f).convert('L')  # 用PIL中的Image.open打开图像
+            image = Image.open('../datasets/jaffe/surprise/' + f).convert('L')  # 用PIL中的Image.open打开图像
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr.astype(float)
@@ -55,13 +57,12 @@ def create_dataset():
 if __name__ == '__main__':
     traind, trainl, testd, testl = create_dataset()
 
-    traind, trainl = utils.shuffle_dataset_and_label(traind, trainl)
     print(f'train data shape: {traind.shape}')
     print(f'test data shape: {testd.shape}')
 
     parser = argparse.ArgumentParser(description='Args for mnist test.')
     parser.add_argument('--batch', '-b', default=250)
-    parser.add_argument('--device', '-d', default='cpu')
+    parser.add_argument('--device', '-d', default='py_cuda')
 
     eval_batch = int(parser.parse_args().batch)
     device = parser.parse_args().device

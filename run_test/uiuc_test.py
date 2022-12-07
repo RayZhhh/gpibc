@@ -5,6 +5,8 @@ from PIL import Image
 import os
 
 import utils
+import sys
+sys.path.append('./')
 from gpibc.classifier import BinaryClassifier
 import numpy as np
 
@@ -19,7 +21,7 @@ def create_dataset():
     test_label = np.array([])
 
     # load label [1]
-    for root, ds, fs in os.walk('datasets/uiuc/pos/'):
+    for root, ds, fs in os.walk('../datasets/uiuc/pos/'):
         num = 0
         for f in fs:
             image = Image.open('datasets/uiuc/pos/' + f).convert('L')  # 用PIL中的Image.open打开图像
@@ -35,7 +37,7 @@ def create_dataset():
             num += 1
 
     # load label [-1]
-    for root, ds, fs in os.walk('datasets/uiuc/neg/'):
+    for root, ds, fs in os.walk('../datasets/uiuc/neg/'):
         num = 0
         for f in fs:
             image = Image.open('datasets/uiuc/neg/' + f).convert('L')  # 用PIL中的Image.open打开图像
@@ -59,7 +61,7 @@ def run_uiuc(eval_batch, device):
     print(f'train data shape: {traind.shape}')
     print(f'test data shape: {testd.shape}')
 
-    with open('res.csv', 'a') as fout:
+    with open('../res.csv', 'a') as fout:
         fout.write('uiuc_test\n')
         for _ in range(10):
             classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch, device=device)

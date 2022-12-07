@@ -94,24 +94,6 @@ HOG = 13
 Sub = 14
 
 
-def is_binary_function(func: int) -> bool:
-    if func == Sub:
-        return True
-    return False
-
-
-def is_unary_function(func: int) -> bool:
-    if func != Sub:
-        return True
-    return False
-
-
-def is_terminal(func: int) -> bool:
-    if func == Region_R or func == Region_S:
-        return True
-    return False
-
-
 def to_str(func: int) -> str:
     l: List[str] = ['Region_S', 'Region_R', 'G_Std', 'Hist_Eq', 'Gau1', 'Gau11', 'GauXY',
                     'Lap', 'Sobel_X', 'Sobel_Y', 'LoG1', 'LoG2', 'LBP', 'HOG', 'Sub']

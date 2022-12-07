@@ -1,10 +1,13 @@
 import argparse
+import sys
 import time
 
 from PIL import Image
 import os
 
 import utils
+import sys
+sys.path.append('./')
 from gpibc.classifier import BinaryClassifier, BinaryClassifierWithInstanceSelection
 import numpy as np
 
@@ -75,7 +78,7 @@ def run_cifar(l1, l2, eval_batch, device, ins_sel):
     print(f'data.shape: {data.shape}')
     print(f'test_data.shape: {test_data.shape}')
 
-    with open('res.csv', 'a') as fout:
+    with open('../res.csv', 'a') as fout:
         fout.write('cifar_test\n')
         for _ in range(10):
             if not ins_sel:

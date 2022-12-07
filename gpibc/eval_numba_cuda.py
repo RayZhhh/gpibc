@@ -3,6 +3,8 @@
 
 
 import math
+import time
+
 import numba
 from numba import cuda
 import numpy as np
@@ -663,10 +665,10 @@ def infer_population(name, rx, ry, rh, rw, plen, img_h, img_w, data_size, datase
 
 
 @numba.jit(nopython=True)
-def cal_accuracy(res, label, data_size, i) -> float:
+def _cal_accuracy(res, label, data_size: int, program_no: int) -> float:
     correct = 0
     for j in range(data_size):
-        if label[j] > 0 and res[i][j] > 0 or label[j] < 0 and res[i][j] < 0:
+        if label[j] > 0 and res[program_no][j] > 0 or label[j] < 0 and res[program_no][j] < 0:
             correct += 1
     return correct / data_size
 
@@ -696,6 +698,9 @@ class NumbaCudaEvaluator:
         self._d_hist = self._allocate_device_hist_buffer()
         self._d_res = self._allocate_device_res_buffer()
         self._d_conv_buffer = self._allocate_device_conv_buffer()
+
+        # profiling
+        self.cuda_kernel_time = 0
 
     def _allocate_device_stack(self):
         return cuda.device_array(self.data_size * self.img_h * self.img_w * self.eval_batch, float)
@@ -731,7 +736,7 @@ class NumbaCudaEvaluator:
             plen[i] = len(program)
             for j in range(len(program)):
                 name[i][j] = program[j].name
-                if program[j].is_terminal():
+                if program[j].is_terminal_node():
                     rx[i][j] = program[j].rx
                     ry[i][j] = program[j].ry
                     rh[i][j] = program[j].rh
@@ -745,15 +750,17 @@ class NumbaCudaEvaluator:
         # launch kernel
         grid = (int((self.data_size - 1 + self.thread_per_block) / self.thread_per_block), cur_batch_size)
 
+        kernel_start = time.time()
         infer_population[grid, self.thread_per_block](name, rx, ry, rh, rw, plen, self.img_h, self.img_w,
                                                       self.data_size, self._d_dataset, self._d_stack,
                                                       self._d_conv_buffer, self._d_hist, self._d_res)
         cuda.synchronize()
+        self.cuda_kernel_time += time.time() - kernel_start
 
         # get accuracy
         res = self._d_res.copy_to_host().reshape(self.eval_batch, -1)
         for i in range(cur_batch_size):
-            pop_batch[i].fitness = cal_accuracy(res, self.label, self.data_size, i)
+            pop_batch[i].fitness = _cal_accuracy(res, self.label, self.data_size, i)
 
     def evaluate_population(self, population: List[Program]):
         """Evaluate fitness for a whole population.

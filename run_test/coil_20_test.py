@@ -5,6 +5,8 @@ from PIL import Image
 import os
 
 import utils
+import sys
+sys.path.append('./')
 from gpibc.classifier import BinaryClassifier
 import numpy as np
 
@@ -19,7 +21,7 @@ def create_dataset():
     test_label = np.array([])
 
     # load label [1]
-    for root, ds, fs in os.walk('datasets/coil-20/'):
+    for root, ds, fs in os.walk('../datasets/coil-20/'):
         num = 0
         for f in fs:
             if f.split('__')[0] == 'obj10':
@@ -37,7 +39,7 @@ def create_dataset():
                 num += 1
 
     # load label [-1]
-    for root, ds, fs in os.walk('datasets/coil-20/'):
+    for root, ds, fs in os.walk('../datasets/coil-20/'):
         num = 0
         for f in fs:
             if f.split('__')[0] == 'obj20':
@@ -68,7 +70,7 @@ if __name__ == '__main__':
     print(f'train data shape: {traind.shape}')
     print(f'test data shape: {testd.shape}')
 
-    with open('res.csv', 'a') as fout:
+    with open('../res.csv', 'a') as fout:
         fout.write('coil_20_test\n')
         for _ in range(10):
             classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch, device=device)
