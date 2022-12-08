@@ -1,12 +1,19 @@
 import time
 from typing import List
 from gpibc.program import Program
-from pycuda import driver
 import numpy as np
 from numba import jit
+
+# !!! DO NOT DELETE THIS IMPORT, IT IS IMPORTANT !!!
+# !!! IGNORE THE NOTICE OF PYCHARM !!!
+# when importing the module [pycuda.autoprimaryctx],
+# PyCUDA will automatically create a new context for current environment
 import pycuda.autoprimaryctx
+
 from pycuda.compiler import SourceModule
 from pycuda import gpuarray
+from pycuda import driver
+
 
 # the max value of pixels
 # this value is for histogram based functions
@@ -23,7 +30,8 @@ MAX_STACK_SIZE = 10
 
 # device side kernels
 # these functions are implemented by CUDA C/C++ layer
-PYCUDA_EVAL_MODULE = SourceModule(source=r"""
+# these CUDA C/C++ code will be compiled by PyCUDA before fitness evaluation
+_CUDA_CPP_SOURCE_CODE = r"""
 enum F {
     Region_S, Region_R, G_Std, Hist_Eq, Gau1, Gau11, GauXY, Lap, Sobel_X, Sobel_Y, LoG1, LoG2, LBP, HOG, Sub
 };
@@ -656,9 +664,7 @@ void infer_population(int *name, int *rx, int *ry, int *rh, int *rw, int *plen, 
     }
     //if (threadIdx.x == 1) { printf("cpp kernel time is : %d\n", clock() - ts); }
 }
-""")
-
-infer_population_kernel = PYCUDA_EVAL_MODULE.get_function('infer_population')
+"""
 
 # each float value is 8 bytes
 _SIZE_FLOAT = 8
@@ -678,14 +684,18 @@ def _cal_accuracy(res, label, data_size: int, program_no: int) -> float:
 
 
 class PyCudaEvaluator:
-    def __init__(self, data, label, eval_batch=1, thread_per_block=128):
+    def __init__(self, data, label, eval_batch=1, thread_per_block=128, cuda_arch=None, cuda_code=None):
         """
         Args:
             data            : train-set or test-set
             label           : train-label or test-label
             eval_batch      : the number of programs evaluates simultaneously
             thread_per_block: equals to blockDim.x
+            cuda_arch       : CUDA arch, the argument of [nvcc -arch=compute_75 -o ...]
+            cuda_code       : CUDA code, the argument of [nvcc -code=sm_75 -o ...]
         """
+        self.infer_population_kernel = SourceModule(source=_CUDA_CPP_SOURCE_CODE, arch=cuda_arch, code=cuda_code) \
+            .get_function('infer_population')
 
         self.data = data
         self.label = label
@@ -722,6 +732,28 @@ class PyCudaEvaluator:
 
         # profiling
         self.cuda_kernel_time = 0
+
+    def load_data_and_label(self, data, label):
+        """load new data and label for evaluation"""
+        self.data = data
+        self.label = label
+        self.data_size = len(data)
+        self.img_h = len(self.data[0])
+        self.img_w = len(self.data[0][0])
+
+        # free device side buffers
+        del self._d_dataset
+        del self._d_stack
+        del self._d_hist_buffer
+        del self._d_std_res
+        del self._d_conv_buffer
+
+        # init device side buffers
+        self._transfer_dataset()
+        self._allocate_device_stack()
+        self._allocate_device_conv_buffer()
+        self._allocate_device_hist_buffer()
+        self._allocate_device_res_buffer()
 
     def _transfer_dataset(self):
         data_ = self.data.reshape(self.data_size, -1).T
@@ -789,10 +821,10 @@ class PyCudaEvaluator:
         block = (self.thread_per_block, 1, 1)
 
         kernel_start = time.time()
-        infer_population_kernel(self._d_name, self._d_rx, self._d_ry, self._d_rh, self._d_rw, self._d_plen,
-                                np.int32(self.img_h), np.int32(self.img_w), np.int32(self.data_size),
-                                self._d_dataset, self._d_stack, self._d_conv_buffer, self._d_hist_buffer,
-                                self._d_std_res, grid=grid, block=block)
+        self.infer_population_kernel(self._d_name, self._d_rx, self._d_ry, self._d_rh, self._d_rw, self._d_plen,
+                                     np.int32(self.img_h), np.int32(self.img_w), np.int32(self.data_size),
+                                     self._d_dataset, self._d_stack, self._d_conv_buffer, self._d_hist_buffer,
+                                     self._d_std_res, grid=grid, block=block)
         driver.Context.synchronize()
         self.cuda_kernel_time += time.time() - kernel_start
 
