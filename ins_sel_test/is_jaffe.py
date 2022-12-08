@@ -62,8 +62,8 @@ if __name__ == '__main__':
     print(f'test data shape: {testd.shape}')
 
     parser = argparse.ArgumentParser(description='Args for mnist test.')
-    parser.add_argument('--batch', '-b', default=250)
-    parser.add_argument('--device', '-d', default='cpu')
+    parser.add_argument('--batch', '-b', default=50)
+    parser.add_argument('--device', '-d', default='py_cuda')
 
     eval_batch = int(parser.parse_args().batch)
     device = parser.parse_args().device
