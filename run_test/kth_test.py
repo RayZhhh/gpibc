@@ -24,7 +24,7 @@ def create_dataset():
     for root, ds, fs in os.walk('../datasets/kth/cork_all/'):
         num = 0
         for f in fs:
-            image = Image.open('datasets/kth/cork_all/' + f).convert('L')  # 用PIL中的Image.open打开图像
+            image = Image.open('../datasets/kth/cork_all/' + f).convert('L')  # 用PIL中的Image.open打开图像
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr.astype(float)
@@ -40,7 +40,7 @@ def create_dataset():
     for root, ds, fs in os.walk('../datasets/kth/brown_bread_all/'):
         num = 0
         for f in fs:
-            image = Image.open('datasets/kth/brown_bread_all/' + f).convert('L')  # 用PIL中的Image.open打开图像
+            image = Image.open('../datasets/kth/brown_bread_all/' + f).convert('L')  # 用PIL中的Image.open打开图像
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr.astype(float)

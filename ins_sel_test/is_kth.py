@@ -79,14 +79,14 @@ def run_kth_test(eval_batch, device):
             fout.write(str(dur) + ',' + str(classifier.best_test_program.fitness) + ',' + str(
                 classifier.fitness_evaluation_time) + '\n')
 
-            del (classifier)
+            del classifier
         fout.write('\n')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Args for mnist test.')
-    parser.add_argument('--batch', '-b', default=20)
-    parser.add_argument('--device', '-d', default='cpu')
+    parser.add_argument('--batch', '-b', default=15)
+    parser.add_argument('--device', '-d', default='py_cuda')
     device = parser.parse_args().device
     eval_batch = int(parser.parse_args().batch)
     run_kth_test(eval_batch=eval_batch, device=device)

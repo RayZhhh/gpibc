@@ -279,22 +279,22 @@ class BinaryClassifierWithInstanceSelection(BinaryClassifier):
                                     self.train_label[3 * subset_len:4 * subset_len],
                                     self.train_label[4 * subset_len:]]
 
+    def _get_evaluator(self, data, label):
         if self.device == 'numba_cuda':
             from gpibc.eval_numba_cuda import NumbaCudaEvaluator
-            self.sub_evaluators = [
-                NumbaCudaEvaluator(self.train_subsets[i], self.train_label_subsets[i], self.eval_batch,
-                                   thread_per_block) for i in range(5)]
+            return NumbaCudaEvaluator(data, label, self.eval_batch, self.thread_per_block)
 
         elif self.device == 'cpu':
-            self.sub_evaluators = [CPUEvaluator(self.train_subsets[i], self.train_label_subsets[i]) for i in range(5)]
+            return CPUEvaluator(data, label)
 
         else:  # py_cuda
             from gpibc.eval_pycuda import PyCudaEvaluator
-            self.sub_evaluators = [
-                PyCudaEvaluator(self.train_subsets[i], self.train_label_subsets[i], self.eval_batch,
-                                thread_per_block) for i in range(5)]
+            return PyCudaEvaluator(data, label, self.eval_batch, self.thread_per_block)
 
     def train(self):
+        subset_index = 0
+        subset_evaluator = self._get_evaluator(self.train_subsets[subset_index], self.train_label_subsets[subset_index])
+
         # clear kernel time in evaluator (if using GPU)
         if self.device in ['numba_cuda', 'py_cuda']:
             self.evaluator.cuda_kernel_time = 0
@@ -311,7 +311,7 @@ class BinaryClassifierWithInstanceSelection(BinaryClassifier):
 
         # evaluate fitness for the initial population
         fit_eval_start = time.time()
-        self.sub_evaluators[0].evaluate_population(self.population)
+        subset_evaluator.evaluate_population(self.population)
         self.fitness_evaluation_time += time.time() - fit_eval_start
 
         # update
@@ -320,10 +320,15 @@ class BinaryClassifierWithInstanceSelection(BinaryClassifier):
 
         # do iterations
         for iter_times in range(1, self.generations):
-            # the index of subset of training set to be evaluated
-            subset_index = int(iter_times / (int((self.generations - 1) / 5) + 1))
-
             new_population: List[Program] = []
+
+            # the index of subset of training set to be evaluated
+            cur_subset_index = int(iter_times / (int((self.generations - 1) / 5) + 1))
+            if cur_subset_index != subset_index:
+                subset_index = cur_subset_index
+                del subset_evaluator
+                subset_evaluator = self._get_evaluator(self.train_subsets[subset_index],
+                                                       self.train_label_subsets[subset_index])
 
             # elitism
             temp_pop = copy.deepcopy(self.population)
@@ -345,7 +350,7 @@ class BinaryClassifierWithInstanceSelection(BinaryClassifier):
             # fitness evaluation
             # IS method first evaluates a subset of instances
             fit_eval_start = time.time()
-            self.sub_evaluators[subset_index].evaluate_population(self.population)
+            subset_evaluator.evaluate_population(self.population)
             self.fitness_evaluation_time += time.time() - fit_eval_start
 
             # evaluate top 10 individuals on the whole training data
