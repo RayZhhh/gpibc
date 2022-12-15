@@ -7,7 +7,7 @@ import os
 
 import utils
 import sys
-sys.path.append('./')
+sys.path.append('../')
 from gpibc.classifier import BinaryClassifier, BinaryClassifierWithInstanceSelection
 import numpy as np
 
@@ -20,27 +20,24 @@ def create_dataset(name1, name2):
     data_ret = np.array([])
     label_ret = np.array([])
     # load label [1]
-    for root, ds, fs in os.walk('datasets/cifar/cifar_' + name1):
-        num = 0
+    for root, ds, fs in os.walk('../datasets/cifar/cifar_' + name1):
         for f in fs:
-            image = Image.open('datasets/cifar/cifar_' + name1 + '/' + f).convert('L')  # 用PIL中的Image.open打开图像
+            image = Image.open('../datasets/cifar/cifar_' + name1 + '/' + f).convert('L')  # 用PIL中的Image.open打开图像
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr.astype(float)
             data_ret = np.append(data_ret, image_arr)
             label_ret = np.append(label_ret, [1])
-            num += 1
+
     # load label [-1]
-    for root, ds, fs in os.walk('datasets/cifar/cifar_' + name2):
-        num = 0
+    for root, ds, fs in os.walk('../datasets/cifar/cifar_' + name2):
         for f in fs:
-            image = Image.open('datasets/cifar/cifar_' + name2 + '/' + f).convert('L')  # 用PIL中的Image.open打开图像
+            image = Image.open('../datasets/cifar/cifar_' + name2 + '/' + f).convert('L')  # 用PIL中的Image.open打开图像
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr.astype(float)
             data_ret = np.append(data_ret, image_arr)
             label_ret = np.append(label_ret, [-1])
-            num += 1
     print('Create dataset OK.')
     return data_ret.reshape(-1, IH, IW), label_ret
 
@@ -50,18 +47,18 @@ def create_test_dataset(name1, name2):
     data_ret = np.array([])
     label_ret = np.array([])
     # load label [1]
-    for root, ds, fs in os.walk('datasets/cifar/test_' + name1):
+    for root, ds, fs in os.walk('../datasets/cifar/test_' + name1):
         for f in fs:
-            image = Image.open('datasets/cifar/test_' + name1 + '/' + f).convert('L')  # 用PIL中的Image.open打开图像
+            image = Image.open('../datasets/cifar/test_' + name1 + '/' + f).convert('L')  # 用PIL中的Image.open打开图像
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr.astype(float)
             data_ret = np.append(data_ret, image_arr)
             label_ret = np.append(label_ret, [1])
     # load label [-1]
-    for root, ds, fs in os.walk('datasets/cifar/test_' + name2):
+    for root, ds, fs in os.walk('../datasets/cifar/test_' + name2):
         for f in fs:
-            image = Image.open('datasets/cifar/test_' + name2 + '/' + f).convert('L')  # 用PIL中的Image.open打开图像
+            image = Image.open('../datasets/cifar/test_' + name2 + '/' + f).convert('L')  # 用PIL中的Image.open打开图像
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr.astype(float)
@@ -78,7 +75,7 @@ def run_cifar(l1, l2, eval_batch, device, ins_sel):
     print(f'data.shape: {data.shape}')
     print(f'test_data.shape: {test_data.shape}')
 
-    with open('../res.csv', 'a') as fout:
+    with open('res.csv', 'a') as fout:
         fout.write('cifar_test\n')
         for _ in range(10):
             if not ins_sel:

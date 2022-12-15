@@ -138,6 +138,34 @@ def _g_std(stack, data_size, im_h, im_w, rx, ry, rh, rw, std_res, top):
 
 
 @cuda.jit(device=True)
+def _g_std_mean(stack, data_size, im_h, im_w, rx, ry, rh, rw, std_res, top):
+    """
+    1. pixel_value /= MAX_PIXEL_VALUE.
+    2. calculate the std value of input region.
+    The equivalent operation is: std_res = std_res / (MAX_PIXEL_VALUE ** 2).
+    """
+    img_index = cuda.blockDim.x * cuda.blockIdx.x + cuda.threadIdx.x
+
+    if img_index < data_size:
+        avg = 0
+        for i in range(rx, rx + rh):
+            for j in range(ry, ry + rw):
+                avg += __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j)
+        avg /= rh * rw
+
+        deviation = 0
+        for i in range(rx, rx + rh):
+            for j in range(ry, ry + rw):
+                value = __pixel_value_in_stack(stack, data_size, im_h, im_w, i, j) - avg
+                deviation += value * value
+        deviation /= rh * rw
+        deviation = math.sqrt(deviation)
+
+        deviation /= (MAX_PIXEL_VALUE * MAX_PIXEL_VALUE)
+        std_res[__std_res_index(top, data_size)] = deviation
+
+
+@cuda.jit(device=True)
 def _sub(std_res, top, data_size):
     # image index this thread is response for
     img_index = cuda.blockDim.x * cuda.blockIdx.x + cuda.threadIdx.x
@@ -571,6 +599,27 @@ def _hist_eq(stack, data_size, im_h, im_w, rx, ry, rh, rw, hist_buffer):
 # Block dims when launching this kernel: THREAD_PER_BLOCK
 
 
+@cuda.jit(device=True)
+def _neg_binary_cross_entropy_loss(std_res, data_size, label):
+    """
+    predict = sigmoid(predict) = 1 / (1 + e ** -predict)
+    loss = ∑ realValue_i * log(predict_i) = 1 * log(predict_1) = log(predict_1)
+    std_res <- loss
+    """
+    img_index = cuda.blockDim.x * cuda.blockIdx.x + cuda.threadIdx.x
+
+    if img_index < data_size:
+        predicted_value = __std_res_value(std_res, 0, data_size)
+        prob = 1 / (1 + math.exp(-predicted_value))
+
+        res = 0
+        label_value = label[img_index]
+        if label_value > 0:
+            res += math.log(prob)
+
+        std_res[__std_res_index(0, data_size)] = res
+
+
 @cuda.jit()
 def infer_population(name, rx, ry, rh, rw, plen, img_h, img_w, data_size, dataset, stack, conv_buffer, hist_buffer,
                      std_res):
@@ -648,7 +697,8 @@ def infer_population(name, rx, ry, rh, rw, plen, img_h, img_w, data_size, datase
             reg_x, reg_y, reg_h, reg_w = reg_x + 1, reg_y + 1, reg_h - 2, reg_w - 2
 
         elif name[program_no][i] == LoG2:
-            pass
+            _log2(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer)
+            reg_x, reg_y, reg_h, reg_w = reg_x + 2, reg_y + 2, reg_h - 4, reg_w - 4
 
         elif name[program_no][i] == HOG:
             pass
@@ -668,13 +718,13 @@ def infer_population(name, rx, ry, rh, rw, plen, img_h, img_w, data_size, datase
 def _cal_accuracy(res, label, data_size: int, program_no: int) -> float:
     correct = 0
     for j in range(data_size):
-        if label[j] > 0 and res[program_no][j] > 0 or label[j] < 0 and res[program_no][j] < 0:
+        if label[j] > 0 and res[program_no][j] > 0 or label[j] <= 0 and res[program_no][j] <= 0:
             correct += 1
     return correct / data_size
 
 
 class NumbaCudaEvaluator:
-    def __init__(self, data, label, eval_batch=1, thread_per_block=128):
+    def __init__(self, data, label, eval_batch=1, thread_per_block=128, metric='accuracy'):
         """
         Args:
             data            : train-set or test-set
@@ -691,6 +741,10 @@ class NumbaCudaEvaluator:
         self.thread_per_block = thread_per_block
         self.max_top = MAX_TOP
         self.max_program_len = MAX_PROGRAM_LEN
+        self.metric = metric
+
+        if metric not in ['accuracy', 'bce']:
+            raise RuntimeError('Argument metric must be "accuracy" or "bce"')
 
         # cuda_device side arrays
         self._d_dataset = cuda.to_device(self.data.reshape(self.data_size, -1).T.reshape(1, -1).squeeze())
@@ -761,6 +815,10 @@ class NumbaCudaEvaluator:
         res = self._d_res.copy_to_host().reshape(self.eval_batch, -1)
         for i in range(cur_batch_size):
             pop_batch[i].fitness = _cal_accuracy(res, self.label, self.data_size, i)
+
+    def infer_program_and_get_feature_vector(self, population: List[Program]) -> np.ndarray:
+        """Infer a population. The result is stored"""
+        pass
 
     def evaluate_population(self, population: List[Program]):
         """Evaluate fitness for a whole population.

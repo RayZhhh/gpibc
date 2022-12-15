@@ -36,11 +36,11 @@ class _Node:
         self.rw = rw
 
     def __repr__(self):
-        return to_str(self.name)
+        return func_to_str(self.name)
 
     def __str__(self):
-        return to_str(self.name) + '(' + str(self.rx) + ', ' + str(self.ry) + ', ' \
-               + str(self.rh) + ', ' + str(self.rw) + ')' if self.is_terminal_node() else to_str(self.name)
+        return func_to_str(self.name) + '(' + str(self.rx) + ', ' + str(self.ry) + ', ' \
+               + str(self.rh) + ', ' + str(self.rw) + ')' if self.is_terminal_node() else func_to_str(self.name)
 
     def is_binary_function_node(self) -> bool:
         return self.name == Sub

@@ -6,7 +6,8 @@ import os
 
 import utils
 import sys
-sys.path.append('./')
+
+sys.path.append('../')
 from gpibc.classifier import BinaryClassifier
 import numpy as np
 
@@ -24,7 +25,7 @@ def create_dataset():
     for root, ds, fs in os.walk('../datasets/uiuc/pos/'):
         num = 0
         for f in fs:
-            image = Image.open('datasets/uiuc/pos/' + f).convert('L')  # 用PIL中的Image.open打开图像
+            image = Image.open('../datasets/uiuc/pos/' + f).convert('L')  # 用PIL中的Image.open打开图像
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr.astype(float)
@@ -40,7 +41,7 @@ def create_dataset():
     for root, ds, fs in os.walk('../datasets/uiuc/neg/'):
         num = 0
         for f in fs:
-            image = Image.open('datasets/uiuc/neg/' + f).convert('L')  # 用PIL中的Image.open打开图像
+            image = Image.open('../datasets/uiuc/neg/' + f).convert('L')  # 用PIL中的Image.open打开图像
             image = image.resize((IH, IW))
             image_arr = np.array(image)  # 转化成numpy数组
             image_arr = image_arr.astype(float)
@@ -61,7 +62,7 @@ def run_uiuc(eval_batch, device):
     print(f'train data shape: {traind.shape}')
     print(f'test data shape: {testd.shape}')
 
-    with open('../res.csv', 'a') as fout:
+    with open('res.csv', 'a') as fout:
         fout.write('uiuc_test\n')
         for _ in range(10):
             classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch, device=device)
@@ -75,7 +76,8 @@ def run_uiuc(eval_batch, device):
             classifier.run_test()
 
             # write result
-            fout.write(str(dur) + ',' + str(classifier.best_test_program.fitness) + ',' + str(classifier.fitness_evaluation_time) + '\n')
+            fout.write(str(dur) + ',' + str(classifier.best_test_program.fitness) + ',' + str(
+                classifier.fitness_evaluation_time) + '\n')
             del (classifier)
         fout.write('\n')
 

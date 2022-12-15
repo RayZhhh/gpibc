@@ -6,7 +6,7 @@ import os
 
 import utils
 import sys
-sys.path.append('./')
+sys.path.append('../')
 from gpibc.classifier import BinaryClassifier
 import numpy as np
 
@@ -25,7 +25,7 @@ def create_dataset():
         num = 0
         for f in fs:
             if f.split('__')[0] == 'obj10':
-                image = Image.open('datasets/coil-20/' + f).convert('L')  # 用PIL中的Image.open打开图像
+                image = Image.open('../datasets/coil-20/' + f).convert('L')  # 用PIL中的Image.open打开图像
                 image = image.resize((IH, IW))
                 image_arr = np.array(image)  # 转化成numpy数组
                 image_arr = image_arr.astype(float)
@@ -43,7 +43,7 @@ def create_dataset():
         num = 0
         for f in fs:
             if f.split('__')[0] == 'obj20':
-                image = Image.open('datasets/coil-20/' + f).convert('L')  # 用PIL中的Image.open打开图像
+                image = Image.open('../datasets/coil-20/' + f).convert('L')  # 用PIL中的Image.open打开图像
                 image = image.resize((IH, IW))
                 image_arr = np.array(image)  # 转化成numpy数组
                 image_arr = image_arr.astype(float)
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     print(f'train data shape: {traind.shape}')
     print(f'test data shape: {testd.shape}')
 
-    with open('../res.csv', 'a') as fout:
+    with open('res.csv', 'a') as fout:
         fout.write('coil_20_test\n')
         for _ in range(10):
             classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch, device=device)

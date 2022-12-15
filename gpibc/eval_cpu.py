@@ -12,7 +12,7 @@ from .program import Program
 MAX_PIXEL_VALUE = 255
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def __conv2d_3x3(region: ndarray, kernel) -> ndarray:
     buffer = np.zeros(shape=(len(region), len(region[0])), dtype=float)
     for i in range(0, len(region) - 2):
@@ -27,7 +27,7 @@ def __conv2d_3x3(region: ndarray, kernel) -> ndarray:
     return buffer[1:-1, 1:-1]
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def __conv2d_5x5(region: ndarray, kernel) -> ndarray:
     buffer = np.zeros(shape=(len(region), len(region[0])), dtype=float)
     for i in range(0, len(region) - 4):
@@ -42,7 +42,7 @@ def __conv2d_5x5(region: ndarray, kernel) -> ndarray:
     return buffer[2:-2, 2:-2]
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def _g_std(region: ndarray) -> float:
     if region.size == 0:
         return 0
@@ -50,7 +50,7 @@ def _g_std(region: ndarray) -> float:
     return std
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def _hist_eq(region: ndarray):
     """Histogram Equalization"""
     buffer = np.zeros(shape=(len(region), len(region[0])), dtype=float)
@@ -80,7 +80,7 @@ def _hist_eq(region: ndarray):
     return buffer
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def _lap(region):
     """
     The Laplacian kernel is: [0, 1, 0]
@@ -91,7 +91,7 @@ def _lap(region):
     return __conv2d_3x3(region, kernel)
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def _sobel_x(region):
     """The Sobel Vertical kernel is: [ 1, 2, 1]
                                      [ 0, 0, 0]
@@ -101,7 +101,7 @@ def _sobel_x(region):
     return __conv2d_3x3(region, kernel)
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def _sobel_y(region):
     """The Sobel Horizontal kernel is: [-1, 0, 1 ]
                                        [-2, 0, 2 ]
@@ -111,7 +111,7 @@ def _sobel_y(region):
     return __conv2d_3x3(region, kernel)
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def _gau1(region):
     """
     The Gaussian smooth kernel is: [1, 2, 1]
@@ -122,21 +122,21 @@ def _gau1(region):
     return __conv2d_3x3(region, kernel)
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def _log1(region):
     kernel = [[0.109, 0.246, 0.270, 0.246, 0.109], [0.246, 0, -0.606, 0, 0.246], [0.270, -0.606, -2., -0.606, 0.270],
               [0.246, 0, -0.606, 0, 0.246], [0.109, 0.246, 0.270, 0.246, 0.109]]
     return __conv2d_5x5(region, kernel)
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def _log2(region):
     kernel = [[0, -0.1, -0.151, -0.1, 0], [-0.1, -0.292, -0.386, -0.292, -0.1], [-0.151, -0.386, -0.5, -0.386, -0.151],
               [-0.1, -0.292, -0.386, -0.292, -0.1], [0, -0.1, -0.151, -0.1, 0]]
     return __conv2d_5x5(region, kernel)
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def _lbp(region):
     """Perform Local Binary Pattern operation to images.
     Step 1:
@@ -174,7 +174,7 @@ def _lbp(region):
     return buffer
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def _gau11(region):
     """Perform Gau11 on image.
     After Gau11 operation, rx += 1; ry += 1; rh -= 2; rw -= 2.
@@ -187,7 +187,7 @@ def _gau11(region):
     return __conv2d_3x3(region, kernel)
 
 
-# @jit(nopython=True)
+@jit(nopython=True)
 def _gauxy(region):
     """Perform GauXY on image.
     After GauXY operation, rx += 1; ry += 1; rh -= 2; rw -= 2.
@@ -200,7 +200,7 @@ def _gauxy(region):
     return __conv2d_3x3(region, kernel)
 
 
-def _infer_program(program: Program, img: ndarray) -> float:
+def infer_program(program: Program, img: ndarray) -> float:
     stack = []
     region: ndarray = ...
     for node in reversed(program.prefix):
@@ -269,8 +269,8 @@ class CPUEvaluator:
     def evaluate_program(self, program: Program):
         correct = 0
         for i in range(len(self.data)):
-            res = _infer_program(program, self.data[i])
-            if res < 0 and self.label[i] < 0 or res > 0 and self.label[i] > 0:
+            res = infer_program(program, self.data[i])
+            if res <= 0 and self.label[i] <= 0 or res > 0 and self.label[i] > 0:
                 correct += 1
         program.fitness = correct / self.data_size
 

@@ -94,7 +94,7 @@ HOG = 13
 Sub = 14
 
 
-def to_str(func: int) -> str:
+def func_to_str(func: int) -> str:
     l: List[str] = ['Region_S', 'Region_R', 'G_Std', 'Hist_Eq', 'Gau1', 'Gau11', 'GauXY',
                     'Lap', 'Sobel_X', 'Sobel_Y', 'LoG1', 'LoG2', 'LBP', 'HOG', 'Sub']
     return l[func]

@@ -1,23 +1,19 @@
 import copy
 import random
 import time
+from typing import List
 
 import numpy as np
 
 from gpibc.program import Program
-from gpibc.fset import *
-# from .eval_numba_cuda import NumbaCudaEvaluator
 from .eval_cpu import CPUEvaluator
-
-
-# from .eval_pycuda import PyCudaEvaluator
 
 
 class BinaryClassifier:
     def __init__(self, train_set: np.ndarray, train_label: np.ndarray, test_set=None, test_label=None,
                  population_size=500, init_method='ramped_half_and_half', init_depth=(3, 6), max_program_depth=8,
                  generations=50, elist_size=5, tournament_size=7, crossover_prob=0.8, mutation_prob=0.19,
-                 device='py_cuda', cu_arch=None, cu_code=None, eval_batch=10, thread_per_block=128):
+                 metric='accuracy', device='py_cuda', cu_arch=None, cu_code=None, eval_batch=10, thread_per_block=128):
         """
         Args:
             train_set        : dataset for training
@@ -25,7 +21,7 @@ class BinaryClassifier:
             test_set         : dataset for testing
             test_label       : label for testing
             population_size  : population size
-            init_method      : 'full', 'growth', of 'ramped_half_and_half'
+            init_method      : 'full', 'grow', of 'ramped_half_and_half'
             init_depth       : the initial depth of the program
             max_program_depth: max program depth in the population, perform hoist mutation if program exceeds this
             generations      : evolution times
@@ -33,24 +29,32 @@ class BinaryClassifier:
             tournament_size  : tournament size while performing tournament selection
             crossover_prob   : crossover probability
             mutation_prob    : mutation probability
+            metric           : the metric to evaluate the program, using accuracy or bce loss
             device           : the cuda_device on which executes fitness evaluation
+            cu_arch          : cuda arch used in: nvcc -o -arch=compute_75
+            cu_code          : cuda code used in: nvcc -o -code=sm_75
             eval_batch       : the number of program to evaluate simultaneously, valid when eval_method='population'
+            thread_per_block : blockDim.x
         """
-        if device not in ['py_cuda', 'numba_cuda', 'cpu']:
-            raise RuntimeError('Device must be "py_cuda" or "numba_cuda" or "cpu".')
-
-        self.train_set = train_set
-        self.train_label = train_label
-
         if len(train_set) != len(train_label):
             raise RuntimeError('The length of train set is not equal to the length of the train label set.')
-
-        self.test_set = test_set
-        self.test_label = test_label
 
         if test_set is not None and test_label is not None and len(test_set) != len(test_label):
             raise RuntimeError('The length of test set is not equal to the length of the test label set.')
 
+        if init_method not in ['full', 'grow', 'ramped_half_and_half']:
+            raise RuntimeError('Argument "init_method" must be "full" or "grow" or "ramped_half_and_half".')
+
+        if metric not in ['accuracy', 'bce']:
+            raise RuntimeError('Argument "loss" must be "accuracy" or "bce".')
+
+        if device not in ['py_cuda', 'numba_cuda', 'cpu']:
+            raise RuntimeError('Argument "device" must be "py_cuda" or "numba_cuda" or "cpu".')
+
+        self.train_set = train_set
+        self.train_label = train_label
+        self.test_set = test_set
+        self.test_label = test_label
         self.data_size = len(train_set)
         self.img_h = len(train_set[0])
         self.img_w = len(train_set[0][0])
@@ -69,9 +73,7 @@ class BinaryClassifier:
         self.eval_batch = eval_batch
         self.thread_per_block = thread_per_block
         self.cuda_kernel_time = 0
-
-        # if self.device in ['py_cuda', 'numba_cuda'] and not cuda.is_available():
-        #     raise RuntimeError('Do not support CUDA on your cuda_device.')
+        self.metric = metric
 
         if self.device == 'numba_cuda':
             from .eval_numba_cuda import NumbaCudaEvaluator
@@ -88,7 +90,7 @@ class BinaryClassifier:
             if self.test_set is not None:
                 self.test_evaluator = CPUEvaluator(self.test_set, self.test_label)
 
-        else:
+        else:  # py_cuda
             from .eval_pycuda import PyCudaEvaluator
             self.evaluator = PyCudaEvaluator(self.train_set, self.train_label, self.eval_batch, thread_per_block)
 
@@ -108,16 +110,36 @@ class BinaryClassifier:
         self.fitness_evaluation_time = 0
         self.training_time = 0
 
+    def _get_evaluator(self, data, label):
+        if self.device == 'numba_cuda':
+            from gpibc.eval_numba_cuda import NumbaCudaEvaluator
+            return NumbaCudaEvaluator(data, label, self.eval_batch, self.thread_per_block)
+
+        elif self.device == 'cpu':
+            return CPUEvaluator(data, label)
+
+        else:  # py_cuda
+            from gpibc.eval_pycuda import PyCudaEvaluator
+            return PyCudaEvaluator(data, label, self.eval_batch, self.thread_per_block, self.cu_arch, self.cu_code)
+
+    def _shuffle_dataset_and_label(self):
+        data_l = list(zip(self.train_set, self.train_label))
+        np.random.shuffle(data_l)
+        dataset_, label_ = zip(*data_l)
+        self.train_set = dataset_
+        self.train_label = label_
+
     def population_init(self):
         if self.init_method == 'full':
             for _ in range(self.population_size):
                 rand_depth = random.randint(self.init_depth[0], self.init_depth[1])
                 self.population.append(Program(self.img_h, self.img_w, rand_depth, 'full'))
 
-        elif self.init_method == 'growth':
+        elif self.init_method == 'grow':
             for _ in range(self.population_size):
                 rand_depth = random.randint(self.init_depth[0], self.init_depth[1])
                 self.population.append(Program(self.img_h, self.img_w, rand_depth, 'growth'))
+
         else:  # 'ramped_half_and_half'
             full_num = int(self.population_size / 2)
             growth_num = self.population_size - full_num
@@ -265,7 +287,15 @@ class BinaryClassifierWithInstanceSelection(BinaryClassifier):
         # split training set and cores label into 5 subsets
         subset_len = int((self.data_size - 1) / 4)
 
+        # shuffle train data and train label
+        self._shuffle_dataset_and_label()
+
         # 5 training subsets
+        # self.train_subsets = [
+        #     train_set[i * subset_len: min((i + 1) * subset_len, len(train_set))]
+        #     for i in range(5)
+        # ]
+
         self.train_subsets = [self.train_set[:subset_len],
                               self.train_set[subset_len:2 * subset_len],
                               self.train_set[2 * subset_len:3 * subset_len],
@@ -273,23 +303,16 @@ class BinaryClassifierWithInstanceSelection(BinaryClassifier):
                               self.train_set[4 * subset_len:]]
 
         # 5 label subsets
+        # self.train_label_subsets = [
+        #     train_label[i * subset_len: min((i + 1) * subset_len, len(train_label))]
+        #     for i in range(5)
+        # ]
+
         self.train_label_subsets = [self.train_label[:subset_len],
                                     self.train_label[subset_len:2 * subset_len],
                                     self.train_label[2 * subset_len:3 * subset_len],
                                     self.train_label[3 * subset_len:4 * subset_len],
                                     self.train_label[4 * subset_len:]]
-
-    def _get_evaluator(self, data, label):
-        if self.device == 'numba_cuda':
-            from gpibc.eval_numba_cuda import NumbaCudaEvaluator
-            return NumbaCudaEvaluator(data, label, self.eval_batch, self.thread_per_block)
-
-        elif self.device == 'cpu':
-            return CPUEvaluator(data, label)
-
-        else:  # py_cuda
-            from gpibc.eval_pycuda import PyCudaEvaluator
-            return PyCudaEvaluator(data, label, self.eval_batch, self.thread_per_block)
 
     def train(self):
         subset_index = 0

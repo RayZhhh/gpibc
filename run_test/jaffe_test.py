@@ -85,5 +85,5 @@ if __name__ == '__main__':
             fout.write(str(dur) + ',' + str(classifier.best_test_program.fitness) + ',' + str(
                 classifier.fitness_evaluation_time) + '\n')
 
-            del(classifier)
+            del classifier
         fout.write('\n')

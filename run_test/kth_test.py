@@ -6,7 +6,7 @@ import os
 
 import utils
 import sys
-sys.path.append('./')
+sys.path.append('../')
 from gpibc.classifier import BinaryClassifier
 import numpy as np
 
@@ -61,7 +61,7 @@ def run_kth_test(eval_batch, device):
     print(f'train data shape: {traind.shape}')
     print(f'test data shape: {testd.shape}')
 
-    with open('../res.csv', 'a') as fout:
+    with open('res.csv', 'a') as fout:
         fout.write('kth_test\n')
         for _ in range(10):
             classifier = BinaryClassifier(traind, trainl, testd, testl, eval_batch=eval_batch, device=device)

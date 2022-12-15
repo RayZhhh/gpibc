@@ -678,7 +678,7 @@ def _cal_accuracy(res, label, data_size: int, program_no: int) -> float:
     correct = 0
     for j in range(data_size):
         predict = res[program_no * data_size * MAX_STACK_SIZE + j]
-        if label[j] < 0 and predict < 0 or label[j] > 0 and predict > 0:
+        if label[j] <= 0 and predict <= 0 or label[j] > 0 and predict > 0:
             correct += 1
     return correct / data_size
 
@@ -694,7 +694,7 @@ class PyCudaEvaluator:
             cuda_arch       : CUDA arch, the argument of [nvcc -arch=compute_75 -o ...]
             cuda_code       : CUDA code, the argument of [nvcc -code=sm_75 -o ...]
         """
-        self.infer_population_kernel = SourceModule(source=_CUDA_CPP_SOURCE_CODE, arch=cuda_arch, code=cuda_code) \
+        self._infer_population_kernel = SourceModule(source=_CUDA_CPP_SOURCE_CODE, arch=cuda_arch, code=cuda_code) \
             .get_function('infer_population')
 
         self.data = data
@@ -821,10 +821,10 @@ class PyCudaEvaluator:
         block = (self.thread_per_block, 1, 1)
 
         kernel_start = time.time()
-        self.infer_population_kernel(self._d_name, self._d_rx, self._d_ry, self._d_rh, self._d_rw, self._d_plen,
-                                     np.int32(self.img_h), np.int32(self.img_w), np.int32(self.data_size),
-                                     self._d_dataset, self._d_stack, self._d_conv_buffer, self._d_hist_buffer,
-                                     self._d_std_res, grid=grid, block=block)
+        self._infer_population_kernel(self._d_name, self._d_rx, self._d_ry, self._d_rh, self._d_rw, self._d_plen,
+                                      np.int32(self.img_h), np.int32(self.img_w), np.int32(self.data_size),
+                                      self._d_dataset, self._d_stack, self._d_conv_buffer, self._d_hist_buffer,
+                                      self._d_std_res, grid=grid, block=block)
         driver.Context.synchronize()
         self.cuda_kernel_time += time.time() - kernel_start
 
@@ -834,6 +834,10 @@ class PyCudaEvaluator:
 
         for i in range(cur_batch_size):
             pop_batch[i].fitness = _cal_accuracy(res, self.label, self.data_size, i)
+
+    def infer_program_and_get_feature_vector(self, population: List[Program]) -> np.ndarray:
+        """Infer a population. The result is stored"""
+        pass
 
     def evaluate_population(self, population: List[Program]):
         """Evaluate fitness for a whole population.

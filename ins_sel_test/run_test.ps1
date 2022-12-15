@@ -12,9 +12,9 @@ python is_mnist.py -d py_cuda -b 10
 #python cifar_test.py -d numba_cuda
 #python mnist_test.py -d numba_cuda
 
-#python is_jaffe.py -d cpu
-#python is_coil.py -d cpu
+python is_jaffe.py -d cpu
+python is_coil.py -d cpu
 #python is_kth.py -d cpu
-#python is_uiuc.py -d cpu
+python is_uiuc.py -d cpu
 #python is_cifar.py -d cpu
 #python is_mnist.py -d cpu
