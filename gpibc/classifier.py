@@ -45,11 +45,11 @@ class BinaryClassifier:
         if init_method not in ['full', 'grow', 'ramped_half_and_half']:
             raise RuntimeError('Argument "init_method" must be "full" or "grow" or "ramped_half_and_half".')
 
-        if metric not in ['accuracy', 'bce']:
-            raise RuntimeError('Argument "loss" must be "accuracy" or "bce".')
+        if metric not in ['accuracy', 'neg_bce']:
+            raise RuntimeError('Argument "loss" must be "accuracy" or "neg_bce".')
 
-        if device not in ['py_cuda', 'numba_cuda', 'cpu']:
-            raise RuntimeError('Argument "device" must be "py_cuda" or "numba_cuda" or "cpu".')
+        if device not in ['py_cuda', 'numba_cuda', 'cupy', 'cpu']:
+            raise RuntimeError('Argument "device" must be "py_cuda" or "numba_cuda" or "cupy" or "cpu".')
 
         self.train_set = train_set
         self.train_label = train_label
@@ -75,52 +75,38 @@ class BinaryClassifier:
         self.cuda_kernel_time = 0
         self.metric = metric
 
-        if self.device == 'numba_cuda':
-            from .eval_numba_cuda import NumbaCudaEvaluator
-            self.evaluator = NumbaCudaEvaluator(self.train_set, self.train_label, self.eval_batch, thread_per_block)
-
-            # evaluator for the test set
-            if self.test_set is not None:
-                self.test_evaluator = NumbaCudaEvaluator(self.test_set, self.test_label)
-
-        elif self.device == 'cpu':
-            self.evaluator = CPUEvaluator(self.train_set, self.train_label)
-
-            # evaluator for the test set
-            if self.test_set is not None:
-                self.test_evaluator = CPUEvaluator(self.test_set, self.test_label)
-
-        else:  # py_cuda
-            from .eval_pycuda import PyCudaEvaluator
-            self.evaluator = PyCudaEvaluator(self.train_set, self.train_label, self.eval_batch, thread_per_block)
-
-            # evaluator for the test set
-            if self.test_set is not None:
-                self.test_evaluator = PyCudaEvaluator(self.test_set, self.test_label)
+        # program evaluator
+        self.evaluator = self._get_evaluator(self.train_set, self.train_label, is_for_train=True)
+        if self.test_set is not None:
+            self.test_evaluator = self._get_evaluator(self.test_set, self.test_label, is_for_train=False)
 
         # population properties
         self.population: List[Program] = []
         self.best_program: Program = ...
         self.best_program_in_each_gen: List[Program] = []
         self.best_fitness: float = ...
-        #
         self.best_test_program: Program = ...
 
         # performance
         self.fitness_evaluation_time = 0
         self.training_time = 0
 
-    def _get_evaluator(self, data, label):
-        if self.device == 'numba_cuda':
-            from gpibc.eval_numba_cuda import NumbaCudaEvaluator
-            return NumbaCudaEvaluator(data, label, self.eval_batch, self.thread_per_block)
+    def _get_evaluator(self, data, label, is_for_train=True):
+        """Returns an evaluator for train_set or test_set.
+        """
+        eval_batch_ = self.eval_batch if is_for_train else 1
 
+        if self.device == 'numba_cuda':
+            from .eval_numba_cuda import NumbaCudaEvaluator
+            return NumbaCudaEvaluator(data, label, eval_batch_, self.thread_per_block, metric=self.metric)
         elif self.device == 'cpu':
             return CPUEvaluator(data, label)
-
-        else:  # py_cuda
-            from gpibc.eval_pycuda import PyCudaEvaluator
-            return PyCudaEvaluator(data, label, self.eval_batch, self.thread_per_block, self.cu_arch, self.cu_code)
+        elif self.device == 'py_cuda':
+            from .eval_pycuda import PyCudaEvaluator
+            return PyCudaEvaluator(data, label, eval_batch_, self.thread_per_block, self.cu_arch, self.cu_code)
+        else:  # 'cupy'
+            from .eval_cupy import CuPyEvaluator
+            return CuPyEvaluator(data, label, eval_batch_, self.thread_per_block)
 
     def _shuffle_dataset_and_label(self):
         data_l = list(zip(self.train_set, self.train_label))
@@ -134,14 +120,12 @@ class BinaryClassifier:
             for _ in range(self.population_size):
                 rand_depth = random.randint(self.init_depth[0], self.init_depth[1])
                 self.population.append(Program(self.img_h, self.img_w, rand_depth, 'full'))
-
         elif self.init_method == 'grow':
             for _ in range(self.population_size):
                 rand_depth = random.randint(self.init_depth[0], self.init_depth[1])
                 self.population.append(Program(self.img_h, self.img_w, rand_depth, 'growth'))
-
         else:  # 'ramped_half_and_half'
-            full_num = int(self.population_size / 2)
+            full_num = self.population_size // 2
             growth_num = self.population_size - full_num
 
             for _ in range(full_num):
@@ -189,7 +173,7 @@ class BinaryClassifier:
 
     def train(self):
         # clear kernel time in evaluator (if using GPU)
-        if self.device in ['numba_cuda', 'py_cuda']:
+        if self.device in ['numba_cuda', 'py_cuda', 'cupy']:
             self.evaluator.cuda_kernel_time = 0
 
         # init these params
@@ -243,7 +227,7 @@ class BinaryClassifier:
 
         # record training time and kernel time (if using GPU)
         self.training_time = time.time() - training_start
-        if self.device in ['numba_cuda', 'py_cuda']:
+        if self.device in ['numba_cuda', 'py_cuda', 'cupy']:
             self.cuda_kernel_time = self.evaluator.cuda_kernel_time
 
     def run_test(self):
@@ -255,29 +239,22 @@ class BinaryClassifier:
         print()
 
 
+# Combine Binary Classifier with Instance Selection Approach.
+# Instance Selection (IS) aims to split a whole dataset in to small subsets and train them.
+# IS can reduce the computational complexity to speed up GP based image classification.
+# Compared with normal GPU classifier, classify larger tasks will see obvious improvements.
 class BinaryClassifierWithInstanceSelection(BinaryClassifier):
+    """
+    Combine Binary Classifier with Instance Selection Approach.
+    Instance Selection (IS) aims to split a whole dataset in to small subsets and train them.
+    IS can reduce the computational complexity to speed up GP based image classification.
+    Compared with normal GPU classifier, classify larger tasks will see obvious improvements.
+    """
     def __init__(self, train_set: np.ndarray, train_label: np.ndarray, test_set=None, test_label=None,
                  population_size=500, init_method='ramped_half_and_half', init_depth=(3, 6), max_program_depth=8,
                  generations=50, elist_size=5, tournament_size=7, crossover_prob=0.8, mutation_prob=0.19,
                  device='py_cuda', cu_arch=None, cu_code=None, eval_batch=10, thread_per_block=128):
-        """
-        Args:
-            train_set        : dataset for training
-            train_label      : label set for training
-            test_set         : dataset for testing
-            test_label       : label for testing
-            population_size  : population size
-            init_method      : 'full', 'growth', of 'ramped_half_and_half'
-            init_depth       : the initial depth of the program
-            max_program_depth: max program depth in the population, perform hoist mutation if program exceeds this
-            generations      : evolution times
-            elist_size       : the first 'elist_size' good individuals go directly to the next generation
-            tournament_size  : tournament size while performing tournament selection
-            crossover_prob   : crossover probability
-            mutation_prob    : mutation probability
-            device           : the cuda_device on which executes fitness evaluation
-            eval_batch       : the number of program to evaluate simultaneously, valid when eval_method='population'
-        """
+
         super(BinaryClassifierWithInstanceSelection, self).__init__(
             train_set, train_label, test_set, test_label, population_size, init_method, init_depth, max_program_depth,
             generations, elist_size, tournament_size, crossover_prob, mutation_prob, device, cu_arch, cu_code,
@@ -346,7 +323,7 @@ class BinaryClassifierWithInstanceSelection(BinaryClassifier):
             new_population: List[Program] = []
 
             # the index of subset of training set to be evaluated
-            cur_subset_index = int(iter_times / (int((self.generations - 1) / 5) + 1))
+            cur_subset_index = iter_times // ((self.generations - 1) // 5 + 1)
             if cur_subset_index != subset_index:
                 subset_index = cur_subset_index
                 del subset_evaluator

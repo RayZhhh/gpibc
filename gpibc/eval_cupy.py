@@ -1,19 +1,12 @@
 import time
 from typing import List
+
+import cupy
+
 from gpibc.program import Program
 import numpy as np
 from numba import jit
-
-# !!! DO NOT DELETE THIS IMPORT, IT IS IMPORTANT !!!
-# !!! IGNORE THE NOTICE OF PYCHARM !!!
-# when importing the module [pycuda.autoprimaryctx],
-# PyCUDA will automatically create a new context for current environment
-import pycuda.autoprimaryctx
-
-from pycuda.compiler import SourceModule
-from pycuda import gpuarray
-from pycuda import driver
-
+from cupy.cuda import runtime
 
 # the max value of pixels
 # this value is for histogram based functions
@@ -662,7 +655,6 @@ void infer_population(int *name, int *rx, int *ry, int *rh, int *rw, int *plen, 
     if (top != 1) {
         printf("Error: top != 1, this may because that the length of program is larger than MAX_PROGRAM_LEN.\n");
     }
-    //if (threadIdx.x == 1) { printf("cpp kernel time is : %d\n", clock() - ts); }
 }
 """
 
@@ -686,19 +678,17 @@ def _cal_accuracy(res, label, data_size: int, program_no: int) -> float:
     return correct / data_size
 
 
-class PyCudaEvaluator:
-    def __init__(self, data, label, eval_batch=1, thread_per_block=128, cuda_arch=None, cuda_code=None):
+class CuPyEvaluator:
+    def __init__(self, data, label, eval_batch=1, thread_per_block=128):
         """
         Args:
             data            : train-set or test-set
             label           : train-label or test-label
             eval_batch      : the number of programs evaluates simultaneously
             thread_per_block: equals to blockDim.x
-            cuda_arch       : CUDA arch, the argument of [nvcc -arch=compute_75 -o ...]
-            cuda_code       : CUDA code, the argument of [nvcc -code=sm_75 -o ...]
         """
-        self._infer_population_kernel = SourceModule(source=_CUDA_CPP_SOURCE_CODE, arch=cuda_arch, code=cuda_code) \
-            .get_function('infer_population')
+        self._cupy_raw_kernel = cupy.RawModule(code=_CUDA_CPP_SOURCE_CODE, backend='nvcc')
+        self._infer_population_kernel = self._cupy_raw_kernel.get_function('infer_population')
 
         self.data = data
         self.label = label
@@ -736,52 +726,31 @@ class PyCudaEvaluator:
         # profiling
         self.cuda_kernel_time = 0
 
-    def load_data_and_label(self, data, label):
-        """load new data and label for evaluation"""
-        self.data = data
-        self.label = label
-        self.data_size = len(data)
-        self.img_h = len(self.data[0])
-        self.img_w = len(self.data[0][0])
-
-        # free device side buffers
-        del self._d_dataset
-        del self._d_stack
-        del self._d_hist_buffer
-        del self._d_std_res
-        del self._d_conv_buffer
-
-        # init device side buffers
-        self._transfer_dataset()
-        self._allocate_device_stack()
-        self._allocate_device_conv_buffer()
-        self._allocate_device_hist_buffer()
-        self._allocate_device_res_buffer()
-
     def _transfer_dataset(self):
         data_ = self.data.reshape(self.data_size, -1).T
         data_ = data_.reshape(-1).astype(np.float32)
-        self._d_dataset = gpuarray.to_gpu(data_)
+        self._d_dataset = runtime.malloc(_SIZE_FLOAT * len(data_))
+        runtime.memcpy(self._d_dataset, data_, _SIZE_FLOAT * len(data_), runtime.memcpyHostToDevice)
 
     def _allocate_device_stack(self):
-        self._d_stack = driver.mem_alloc(_SIZE_FLOAT * self.data_size * self.img_h * self.img_w * self.eval_batch)
+        self._d_stack = runtime.malloc(_SIZE_FLOAT * self.data_size * self.img_h * self.img_w * self.eval_batch)
 
     def _allocate_device_conv_buffer(self):
-        self._d_conv_buffer = driver.mem_alloc(_SIZE_FLOAT * self.data_size * self.img_h * self.img_w * self.eval_batch)
+        self._d_conv_buffer = runtime.malloc(_SIZE_FLOAT * self.data_size * self.img_h * self.img_w * self.eval_batch)
 
     def _allocate_device_hist_buffer(self):
-        self._d_hist_buffer = driver.mem_alloc(_SIZE_FLOAT * self.data_size * (MAX_PIXEL_VALUE + 1) * self.eval_batch)
+        self._d_hist_buffer = runtime.malloc(_SIZE_FLOAT * self.data_size * (MAX_PIXEL_VALUE + 1) * self.eval_batch)
 
     def _allocate_device_res_buffer(self):
-        self._d_std_res = driver.mem_alloc(8 * MAX_STACK_SIZE * self.data_size * self.eval_batch)
+        self._d_std_res = runtime.malloc(8 * MAX_STACK_SIZE * self.data_size * self.eval_batch)
 
     def _allocate_program_buffer(self):
-        self._d_name = driver.mem_alloc(_SIZE_INT * self.eval_batch * MAX_PROGRAM_LEN)
-        self._d_rx = driver.mem_alloc(_SIZE_INT * self.eval_batch * MAX_PROGRAM_LEN)
-        self._d_ry = driver.mem_alloc(_SIZE_INT * self.eval_batch * MAX_PROGRAM_LEN)
-        self._d_rh = driver.mem_alloc(_SIZE_INT * self.eval_batch * MAX_PROGRAM_LEN)
-        self._d_rw = driver.mem_alloc(_SIZE_INT * self.eval_batch * MAX_PROGRAM_LEN)
-        self._d_plen = driver.mem_alloc(_SIZE_INT * self.eval_batch)
+        self._d_name = runtime.malloc(_SIZE_INT * self.eval_batch * MAX_PROGRAM_LEN)
+        self._d_rx = runtime.malloc(_SIZE_INT * self.eval_batch * MAX_PROGRAM_LEN)
+        self._d_ry = runtime.malloc(_SIZE_INT * self.eval_batch * MAX_PROGRAM_LEN)
+        self._d_rh = runtime.malloc(_SIZE_INT * self.eval_batch * MAX_PROGRAM_LEN)
+        self._d_rw = runtime.malloc(_SIZE_INT * self.eval_batch * MAX_PROGRAM_LEN)
+        self._d_plen = runtime.malloc(_SIZE_INT * self.eval_batch)
 
     def _fitness_evaluate_for_a_batch(self, pop_batch: List[Program]):
         """Evaluate a population"""
@@ -812,28 +781,28 @@ class PyCudaEvaluator:
                     rw[i * MAX_PROGRAM_LEN + j] = program[j].rw
 
         # copy to cuda_device
-        driver.memcpy_htod(self._d_name, name)
-        driver.memcpy_htod(self._d_rx, rx)
-        driver.memcpy_htod(self._d_ry, ry)
-        driver.memcpy_htod(self._d_rh, rh)
-        driver.memcpy_htod(self._d_rw, rw)
-        driver.memcpy_htod(self._d_plen, plen)
+        runtime.memcpy(self._d_name, name, _SIZE_INT * len(name), runtime.memcpyHostToDevice)
+        runtime.memcpy(self._d_rx, rx, _SIZE_INT * len(rx), runtime.memcpyHostToDevice)
+        runtime.memcpy(self._d_ry, ry, _SIZE_INT * len(ry), runtime.memcpyHostToDevice)
+        runtime.memcpy(self._d_rh, rh, _SIZE_INT * len(rh), runtime.memcpyHostToDevice)
+        runtime.memcpy(self._d_rw, rw, _SIZE_INT * len(rw), runtime.memcpyHostToDevice)
+        runtime.memcpy(self._d_plen, plen, _SIZE_INT * len(plen), runtime.memcpyHostToDevice)
 
         # launch kernel
-        grid = (int((self.data_size - 1 + self.thread_per_block) / self.thread_per_block), cur_batch_size)
-        block = (self.thread_per_block, 1, 1)
-
+        grid = ((self.data_size - 1 + self.thread_per_block // self.thread_per_block), cur_batch_size)
+        block = (self.thread_per_block,)
         kernel_start = time.time()
-        self._infer_population_kernel(self._d_name, self._d_rx, self._d_ry, self._d_rh, self._d_rw, self._d_plen,
-                                      np.int32(self.img_h), np.int32(self.img_w), np.int32(self.data_size),
-                                      self._d_dataset, self._d_stack, self._d_conv_buffer, self._d_hist_buffer,
-                                      self._d_std_res, grid=grid, block=block)
-        driver.Context.synchronize()
+        self._infer_population_kernel(grid, block,
+                                      (self._d_name, self._d_rx, self._d_ry, self._d_rh, self._d_rw, self._d_plen,
+                                       np.int32(self.img_h), np.int32(self.img_w), np.int32(self.data_size),
+                                       self._d_dataset, self._d_stack, self._d_conv_buffer, self._d_hist_buffer,
+                                       self._d_std_res))
+        runtime.deviceSynchronize()
         self.cuda_kernel_time += time.time() - kernel_start
 
         # get accuracy
         res = np.zeros(MAX_STACK_SIZE * self.eval_batch * self.data_size, np.float32)
-        driver.memcpy_dtoh(res, self._d_std_res)
+        runtime.memcpy(res, self._d_std_res, len(res), runtime.memcpyDeviceToHost)
 
         for i in range(cur_batch_size):
             pop_batch[i].fitness = _cal_accuracy(res, self.label, self.data_size, i)
@@ -850,3 +819,16 @@ class PyCudaEvaluator:
         for i in range(0, len(population), self.eval_batch):
             last_pos = min(i + self.eval_batch, len(population))
             self._fitness_evaluate_for_a_batch(population[i:last_pos])
+
+    # def __del__(self):
+        # runtime.free(self._d_dataset)
+        # runtime.free(self._d_stack)
+        # runtime.free(self._d_hist_buffer)
+        # runtime.free(self._d_std_res)
+        # runtime.free(self._d_conv_buffer)
+        # runtime.free(self._d_name)
+        # runtime.free(self._d_rx)
+        # runtime.free(self._d_ry)
+        # runtime.free(self._d_rh)
+        # runtime.free(self._d_rw)
+        # runtime.free(self._d_plen)

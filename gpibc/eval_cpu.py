@@ -44,7 +44,7 @@ def __conv2d_5x5(region: ndarray, kernel) -> ndarray:
 
 @jit(nopython=True)
 def _g_std(region: ndarray) -> float:
-    if region.size == 0:
+    if len(region) == 0:
         return 0
     std = float(np.std(region))
     return std
@@ -203,19 +203,19 @@ def _gauxy(region):
 def infer_program(program: Program, img: ndarray) -> float:
     stack = []
     region: ndarray = ...
+
+    # reverse iteration
     for node in reversed(program.prefix):
         rx, ry, rh, rw = node.rx, node.ry, node.rh, node.rw
 
         if node.name == Region_R or node.name == Region_S:
             region = img[rx:rx + rh, ry:ry + rw]
-            if region.size == 0:
-                raise RuntimeError('00000__??????')
 
         elif node.name == G_Std:
             try:
                 __reg = _g_std(region)
             except BaseException:
-                print(region)
+                ...
             stack.append(_g_std(region))
 
         elif node.name == Hist_Eq:
