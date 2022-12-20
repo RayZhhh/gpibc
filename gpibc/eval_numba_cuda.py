@@ -815,7 +815,7 @@ def _cal_accuracy(res, label, data_size: int, program_no: int) -> float:
 @numba.jit(nopython=True)
 def _cal_neg_bce_loss(res, data_size: int, program_no: int) -> float:
     """Calculate negative-BCE Loss for a program in the eval batch.
-    A '@numba.jit()' decorator is imposed on this function to speed up the loop statement of python.
+    A '@numba.jit()' decorator is added on this function to speed up the loop statement of python.
 
     return:
         loss = Σ loss_i / data_size.
