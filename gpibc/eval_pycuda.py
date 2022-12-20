@@ -811,7 +811,7 @@ def _cal_neg_bce_loss(res, data_size: int, program_no: int) -> float:
 
 
 class PyCudaEvaluator:
-    def __init__(self, data, label, eval_batch=1, thread_per_block=128, metric='accuracy', cuda_arch=None,
+    def __init__(self, data, label, eval_batch=1, thread_per_block=128, fit_criterion='accuracy', cuda_arch=None,
                  cuda_code=None):
         """
         Args:
@@ -822,12 +822,12 @@ class PyCudaEvaluator:
             cuda_arch       : CUDA arch, the argument of [nvcc -arch=compute_75 -o ...]
             cuda_code       : CUDA code, the argument of [nvcc -code=sm_75 -o ...]
         """
-        if metric not in ['accuracy', 'neg_bce']:
-            raise RuntimeError(f'Argument metric must be "accuracy" or "neg_bce", your metric is: {metric}.')
+        if fit_criterion not in ['accuracy', 'neg_bce']:
+            raise RuntimeError(f'Argument fit_criterion must be "accuracy" or "neg_bce", your metric is: {fit_criterion}.')
 
-        self.metric = metric
+        self.fit_criterion = fit_criterion
 
-        if self.metric == 'accuracy':
+        if self.fit_criterion == 'accuracy':
             self._infer_population_kernel = SourceModule(source=_CUDA_CPP_SOURCE_CODE, arch=cuda_arch, code=cuda_code) \
                 .get_function('infer_population')
         else:
@@ -860,7 +860,7 @@ class PyCudaEvaluator:
 
         # init device side arrays
         self._transfer_dataset()
-        if self.metric == 'neg_bce':
+        if self.fit_criterion == 'neg_bce':
             self._transfer_label()
         self._allocate_device_stack()
         self._allocate_device_conv_buffer()
@@ -889,7 +889,7 @@ class PyCudaEvaluator:
         del self._d_conv_buffer
 
         # init device side buffers
-        if self.metric == 'neg_bce':
+        if self.fit_criterion == 'neg_bce':
             self._transfer_label()
         self._transfer_dataset()
         self._allocate_device_stack()
@@ -967,7 +967,7 @@ class PyCudaEvaluator:
         block = (self.thread_per_block, 1, 1)
 
         kernel_start = time.time()
-        if self.metric == 'accuracy':
+        if self.fit_criterion == 'accuracy':
             self._infer_population_kernel(self._d_name, self._d_rx, self._d_ry, self._d_rh, self._d_rw, self._d_plen,
                                           np.int32(self.img_h), np.int32(self.img_w), np.int32(self.data_size),
                                           self._d_dataset, self._d_stack, self._d_conv_buffer, self._d_hist_buffer,
@@ -989,7 +989,7 @@ class PyCudaEvaluator:
         driver.memcpy_dtoh(res, self._d_std_res)
 
         # calculate accuracy or loss
-        if self.metric == 'accuracy':
+        if self.fit_criterion == 'accuracy':
             for i in range(len(pop_batch)):
                 pop_batch[i].fitness = _cal_accuracy(res, self.label, self.data_size, i)
         else:

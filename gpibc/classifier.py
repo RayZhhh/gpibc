@@ -13,7 +13,7 @@ class BinaryClassifier:
     def __init__(self, train_set: np.ndarray, train_label: np.ndarray, test_set=None, test_label=None,
                  population_size=500, init_method='ramped_half_and_half', init_depth=(3, 6), max_program_depth=8,
                  generations=50, elist_size=5, tournament_size=7, crossover_prob=0.8, mutation_prob=0.19,
-                 metric='accuracy', device='py_cuda', cu_arch=None, cu_code=None, eval_batch=10, thread_per_block=128):
+                 fit_criterion='accuracy', device='py_cuda', cu_arch=None, cu_code=None, eval_batch=10, thread_per_block=128):
         """
         Args:
             train_set        : dataset for training
@@ -29,10 +29,10 @@ class BinaryClassifier:
             tournament_size  : tournament size while performing tournament selection
             crossover_prob   : crossover probability
             mutation_prob    : mutation probability
-            metric           : the metric to evaluate the program, using accuracy or neg_bce loss (numba_cuda only now)
+            fit_criterion    : the criterion to evaluate the program, such as accuracy or neg_bce loss
             device           : the cuda_device on which executes fitness evaluation
-            cu_arch          : cuda arch used in: nvcc -o -arch=compute_75
-            cu_code          : cuda code used in: nvcc -o -code=sm_75
+            cu_arch          : [effective if using py_cuda] cuda arch used in: nvcc -o -arch=compute_75
+            cu_code          : [effective if using py_cuda] cuda code used in: nvcc -o -code=sm_75
             eval_batch       : the number of program to evaluate simultaneously, valid when eval_method='population'
             thread_per_block : blockDim.x
         """
@@ -45,8 +45,8 @@ class BinaryClassifier:
         if init_method not in ['full', 'grow', 'ramped_half_and_half']:
             raise RuntimeError('Argument "init_method" must be "full" or "grow" or "ramped_half_and_half".')
 
-        if metric not in ['accuracy', 'neg_bce']:
-            raise RuntimeError('Argument "loss" must be "accuracy" or "neg_bce".')
+        if fit_criterion not in ['accuracy', 'neg_bce']:
+            raise RuntimeError('Argument "fit_criterion" must be "accuracy" or "neg_bce".')
 
         if device not in ['py_cuda', 'numba_cuda', 'cupy', 'cpu']:
             raise RuntimeError('Argument "device" must be "py_cuda" or "numba_cuda" or "cupy" or "cpu".')
@@ -73,7 +73,7 @@ class BinaryClassifier:
         self.eval_batch = eval_batch
         self.thread_per_block = thread_per_block
         self.cuda_kernel_time = 0
-        self.metric = metric
+        self.fit_criterion = fit_criterion
 
         # program evaluator
         self.evaluator = self._get_evaluator(self.train_set, self.train_label, is_for_train=True)
@@ -100,11 +100,11 @@ class BinaryClassifier:
         if not is_for_train:
             metric_ = 'accuracy'
         else:
-            metric_ = self.metric
+            metric_ = self.fit_criterion
 
         if self.device == 'numba_cuda':
             from .eval_numba_cuda import NumbaCudaEvaluator
-            return NumbaCudaEvaluator(data, label, eval_batch_, self.thread_per_block, metric=metric_)
+            return NumbaCudaEvaluator(data, label, eval_batch_, self.thread_per_block, fit_criterion=metric_)
 
         elif self.device == 'cpu':
             return CPUEvaluator(data, label)
@@ -271,7 +271,7 @@ class BinaryClassifierWithInstanceSelection(BinaryClassifier):
         )
 
         # split training set and cores label into 5 subsets
-        subset_len = int((self.data_size - 1) / 4)
+        subset_len = (self.data_size - 1) // 5
 
         # shuffle train data and train label
         self._shuffle_dataset_and_label()

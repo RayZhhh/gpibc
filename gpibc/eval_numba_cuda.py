@@ -827,7 +827,7 @@ def _cal_neg_bce_loss(res, data_size: int, program_no: int) -> float:
 
 
 class NumbaCudaEvaluator:
-    def __init__(self, data, label, eval_batch=1, thread_per_block=128, metric='accuracy'):
+    def __init__(self, data, label, eval_batch=1, thread_per_block=128, fit_criterion='accuracy'):
         """
         Args:
             data            : train-set or test-set
@@ -835,8 +835,8 @@ class NumbaCudaEvaluator:
             eval_batch      : the number of programs evaluates simultaneously
             thread_per_block: equals to blockDim.x
         """
-        if metric not in ['accuracy', 'neg_bce']:
-            raise RuntimeError('Argument metric must be "accuracy" or "neg_bce"')
+        if fit_criterion not in ['accuracy', 'neg_bce']:
+            raise RuntimeError('Argument criterion must be "accuracy" or "neg_bce"')
 
         self.data = data
         self.label = label
@@ -847,13 +847,13 @@ class NumbaCudaEvaluator:
         self.thread_per_block = thread_per_block
         self.max_top = MAX_TOP
         self.max_program_len = MAX_PROGRAM_LEN
-        self.metric = metric
+        self.fit_criterion = fit_criterion
 
         # cuda_device side arrays
         self._d_dataset = cuda.to_device(self.data.reshape(self.data_size, -1).T.reshape(1, -1).squeeze())
 
         # copy the label to device side if using negative binary cross
-        if self.metric == 'neg_bce':
+        if self.fit_criterion == 'neg_bce':
             self._d_label = cuda.to_device(self.label)
 
         self._d_stack = self._allocate_device_stack()
@@ -911,7 +911,7 @@ class NumbaCudaEvaluator:
         # launch kernel
         grid = ((self.data_size - 1 + self.thread_per_block) // self.thread_per_block, cur_batch_size)
 
-        if self.metric == 'accuracy':
+        if self.fit_criterion == 'accuracy':
             kernel_start = time.time()
             infer_population[grid, self.thread_per_block](name, rx, ry, rh, rw, plen, self.img_h, self.img_w,
                                                           self.data_size, self._d_dataset, self._d_stack,
@@ -933,7 +933,7 @@ class NumbaCudaEvaluator:
         self._infer_population_for_a_batch(pop_batch)
 
         # calculate accuracy or loss
-        if self.metric == 'accuracy':
+        if self.fit_criterion == 'accuracy':
             # copy the std_res from device to host
             res = self._d_res.copy_to_host().reshape(self.eval_batch, -1)
             for i in range(len(pop_batch)):
