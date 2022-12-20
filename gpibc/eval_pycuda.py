@@ -4,16 +4,13 @@ from gpibc.program import Program
 import numpy as np
 from numba import jit
 
-# !!! DO NOT DELETE THIS IMPORT, IT IS IMPORTANT !!!
-# !!! IGNORE THE NOTICE OF PYCHARM !!!
-# when importing the module [pycuda.autoprimaryctx],
 # PyCUDA will automatically create a new context for current environment
+# through importing pycuda.autoprimaryctx
 import pycuda.autoprimaryctx
 
 from pycuda.compiler import SourceModule
 from pycuda import gpuarray
 from pycuda import driver
-
 
 # the max value of pixels
 # this value is for histogram based functions
@@ -580,7 +577,7 @@ void _hist_eq(float *stack, int data_size, int im_h, int im_w, int rx, int ry, i
 __global__
 void infer_population(int *name, int *rx, int *ry, int *rh, int *rw, int *plen, int img_h, int img_w, int data_size,
                  float *dataset, float *stack, float *conv_buffer, float *hist_buffer, float *std_res) {
-    auto ts = clock();
+
     // the index of program that the current thread is responsible for
     int program_no = blockIdx.y;
 
@@ -662,7 +659,120 @@ void infer_population(int *name, int *rx, int *ry, int *rh, int *rw, int *plen, 
     if (top != 1) {
         printf("Error: top != 1, this may because that the length of program is larger than MAX_PROGRAM_LEN.\n");
     }
-    //if (threadIdx.x == 1) { printf("cpp kernel time is : %d\n", clock() - ts); }
+}
+
+
+__device__
+void _neg_binary_cross_entropy_loss(float *std_res, int data_size, int *label) {
+    int img_index = blockDim.x * blockIdx.x + threadIdx.x;
+
+    if (img_index < data_size) {
+        float predicted_value = __std_res_value(std_res, 0, data_size);
+        predicted_value /= (MAX_PIXEL_VALUE * MAX_PIXEL_VALUE);
+
+        float prob = (float) 1 / (1 + std::exp(-predicted_value));
+
+        float res = 0;
+        int label_value = label[img_index];
+        if (label_value > 0) {
+            res += std::log(prob);
+        } else {
+            res += std::log(1 - prob);
+        }
+        std_res[__std_res_index(0, data_size)] = res;
+    }
+}
+
+
+__global__
+void
+infer_population_neg_bce(int *name, int *rx, int *ry, int *rh, int *rw, int *plen, int img_h, int img_w, int data_size,
+                         float *dataset, float *stack, float *conv_buffer, float *hist_buffer, float *std_res,
+                         int *label) {
+    // the index of program that the current thread is responsible for
+    int program_no = blockIdx.y;
+
+    // init the top of the stack, the x, y, h, w of the region
+    int top = 0, reg_x = 0, reg_y = 0, reg_h = 0, reg_w = 0;
+
+    // reverse iteration
+    int len = plen[program_no];
+    for (int i = len - 1; i >= 0; i--) {
+
+        // the offset of the node
+        int node_offset = MAX_PROGRAM_LEN * program_no + i;
+        int node_name = name[node_offset];
+
+        // do correspond operations with respect to the type of the node
+        if (node_name == Region_R) {
+            reg_x = rx[node_offset], reg_y = ry[node_offset], reg_h = rh[node_offset], reg_w = rw[node_offset];
+            _region(dataset, data_size, img_h, img_w, stack);
+
+        } else if (node_name == Region_S) {
+            reg_x = rx[node_offset], reg_y = ry[node_offset], reg_h = rh[node_offset], reg_w = rw[node_offset];
+            _region(dataset, data_size, img_h, img_w, stack);
+
+        } else if (node_name == G_Std) {
+            _g_std(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, std_res, top);
+            top++;
+
+        } else if (node_name == Hist_Eq) {
+            _hist_eq(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, hist_buffer);
+
+        } else if (node_name == Gau1) {
+            _gau1(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer);
+            reg_x += 1, reg_y += 1, reg_h -= 2, reg_w -= 2;
+
+        } else if (node_name == Gau11) {
+            _gau11(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer);
+            reg_x += 1, reg_y += 1, reg_h -= 2, reg_w -= 2;
+
+        } else if (node_name == GauXY) {
+            _gauxy(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer);
+            reg_x += 1, reg_y += 1, reg_h -= 2, reg_w -= 2;
+
+        } else if (node_name == Lap) {
+            _lap(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer);
+            reg_x += 1, reg_y += 1, reg_h -= 2, reg_w -= 2;
+
+        } else if (node_name == Sobel_X) {
+            _sobel_x(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer);
+            reg_x += 1, reg_y += 1, reg_h -= 2, reg_w -= 2;
+
+        } else if (node_name == Sobel_Y) {
+            _sobel_y(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer);
+            reg_x += 1, reg_y += 1, reg_h -= 2, reg_w -= 2;
+
+        } else if (node_name == LoG1) {
+            _log1(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer);
+            reg_x += 2, reg_y += 2, reg_h -= 4, reg_w -= 4;
+
+        } else if (node_name == LoG2) {
+            _log2(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer);
+            reg_x += 2, reg_y += 2, reg_h -= 4, reg_w -= 4;
+
+        } else if (node_name == LBP) {
+            _lbp(stack, data_size, img_h, img_w, reg_x, reg_y, reg_h, reg_w, conv_buffer);
+            reg_x += 1, reg_y += 1, reg_h -= 2, reg_w -= 2;
+
+        } else if (node_name == Sub) {
+            _sub(std_res, top, data_size);
+            top--;
+
+        } else {
+            printf("Error: Do not support the function, the value of the function is: %d. Try to debug.\n", node_name);
+        }
+    }
+
+    if (top != 1) {
+        printf("Error: top != 1, this may because that the length of program is larger than MAX_PROGRAM_LEN.\n");
+    }
+    
+    // cal loss
+    _neg_binary_cross_entropy_loss(std_res, data_size, label);
+    
+     // threads synchronization
+    __syncthreads();
 }
 """
 
@@ -686,8 +796,23 @@ def _cal_accuracy(res, label, data_size: int, program_no: int) -> float:
     return correct / data_size
 
 
+@jit(nopython=True)
+def _cal_neg_bce_loss(res, data_size: int, program_no: int) -> float:
+    """Calculate negative-BCE Loss for a program in the eval batch.
+    A '@numba.jit()' decorator is imposed on this function to speed up the loop statement of python.
+
+    return:
+        loss = Σ loss_i / data_size.
+    """
+    loss = 0
+    for j in range(data_size):
+        loss += res[program_no * data_size * MAX_STACK_SIZE + j]
+    return loss
+
+
 class PyCudaEvaluator:
-    def __init__(self, data, label, eval_batch=1, thread_per_block=128, cuda_arch=None, cuda_code=None):
+    def __init__(self, data, label, eval_batch=1, thread_per_block=128, metric='accuracy', cuda_arch=None,
+                 cuda_code=None):
         """
         Args:
             data            : train-set or test-set
@@ -697,8 +822,17 @@ class PyCudaEvaluator:
             cuda_arch       : CUDA arch, the argument of [nvcc -arch=compute_75 -o ...]
             cuda_code       : CUDA code, the argument of [nvcc -code=sm_75 -o ...]
         """
-        self._infer_population_kernel = SourceModule(source=_CUDA_CPP_SOURCE_CODE, arch=cuda_arch, code=cuda_code) \
-            .get_function('infer_population')
+        if metric not in ['accuracy', 'neg_bce']:
+            raise RuntimeError(f'Argument metric must be "accuracy" or "neg_bce", your metric is: {metric}.')
+
+        self.metric = metric
+
+        if self.metric == 'accuracy':
+            self._infer_population_kernel = SourceModule(source=_CUDA_CPP_SOURCE_CODE, arch=cuda_arch, code=cuda_code) \
+                .get_function('infer_population')
+        else:
+            self._infer_population_kernel = SourceModule(source=_CUDA_CPP_SOURCE_CODE, arch=cuda_arch, code=cuda_code) \
+                .get_function('infer_population_neg_bce')
 
         self.data = data
         self.label = label
@@ -714,6 +848,7 @@ class PyCudaEvaluator:
         self._d_hist_buffer = ...
         self._d_std_res = ...
         self._d_conv_buffer = ...
+        self._d_label = ...
 
         # device side program
         self._d_name = ...
@@ -725,6 +860,8 @@ class PyCudaEvaluator:
 
         # init device side arrays
         self._transfer_dataset()
+        if self.metric == 'neg_bce':
+            self._transfer_label()
         self._allocate_device_stack()
         self._allocate_device_conv_buffer()
         self._allocate_device_hist_buffer()
@@ -752,6 +889,8 @@ class PyCudaEvaluator:
         del self._d_conv_buffer
 
         # init device side buffers
+        if self.metric == 'neg_bce':
+            self._transfer_label()
         self._transfer_dataset()
         self._allocate_device_stack()
         self._allocate_device_conv_buffer()
@@ -762,6 +901,11 @@ class PyCudaEvaluator:
         data_ = self.data.reshape(self.data_size, -1).T
         data_ = data_.reshape(-1).astype(np.float32)
         self._d_dataset = gpuarray.to_gpu(data_)
+
+    def _transfer_label(self):
+        label_ = self.label.astype(np.int)
+        self._d_label = driver.mem_alloc(_SIZE_INT * self.data_size)
+        driver.memcpy_htod(self._d_label, label_)
 
     def _allocate_device_stack(self):
         self._d_stack = driver.mem_alloc(_SIZE_FLOAT * self.data_size * self.img_h * self.img_w * self.eval_batch)
@@ -783,8 +927,7 @@ class PyCudaEvaluator:
         self._d_rw = driver.mem_alloc(_SIZE_INT * self.eval_batch * MAX_PROGRAM_LEN)
         self._d_plen = driver.mem_alloc(_SIZE_INT * self.eval_batch)
 
-    def _fitness_evaluate_for_a_batch(self, pop_batch: List[Program]):
-        """Evaluate a population"""
+    def _infer_population_for_a_batch(self, pop_batch: List[Program]):
         cur_batch_size = len(pop_batch)
 
         # the size of the current pop to be eval must <= the size of eval_batch
@@ -820,23 +963,38 @@ class PyCudaEvaluator:
         driver.memcpy_htod(self._d_plen, plen)
 
         # launch kernel
-        grid = (int((self.data_size - 1 + self.thread_per_block) / self.thread_per_block), cur_batch_size)
+        grid = ((self.data_size - 1 + self.thread_per_block) // self.thread_per_block, cur_batch_size)
         block = (self.thread_per_block, 1, 1)
 
         kernel_start = time.time()
-        self._infer_population_kernel(self._d_name, self._d_rx, self._d_ry, self._d_rh, self._d_rw, self._d_plen,
-                                      np.int32(self.img_h), np.int32(self.img_w), np.int32(self.data_size),
-                                      self._d_dataset, self._d_stack, self._d_conv_buffer, self._d_hist_buffer,
-                                      self._d_std_res, grid=grid, block=block)
+        if self.metric == 'accuracy':
+            self._infer_population_kernel(self._d_name, self._d_rx, self._d_ry, self._d_rh, self._d_rw, self._d_plen,
+                                          np.int32(self.img_h), np.int32(self.img_w), np.int32(self.data_size),
+                                          self._d_dataset, self._d_stack, self._d_conv_buffer, self._d_hist_buffer,
+                                          self._d_std_res, grid=grid, block=block)
+        else:
+            self._infer_population_kernel(self._d_name, self._d_rx, self._d_ry, self._d_rh, self._d_rw, self._d_plen,
+                                          np.int32(self.img_h), np.int32(self.img_w), np.int32(self.data_size),
+                                          self._d_dataset, self._d_stack, self._d_conv_buffer, self._d_hist_buffer,
+                                          self._d_std_res, self._d_label, grid=grid, block=block)
         driver.Context.synchronize()
         self.cuda_kernel_time += time.time() - kernel_start
 
-        # get accuracy
+    def _fitness_evaluate_for_a_batch(self, pop_batch: List[Program]):
+        """Evaluate a population"""
+        self._infer_population_for_a_batch(pop_batch)
+
+        # copy result from device to host
         res = np.zeros(MAX_STACK_SIZE * self.eval_batch * self.data_size, np.float32)
         driver.memcpy_dtoh(res, self._d_std_res)
 
-        for i in range(cur_batch_size):
-            pop_batch[i].fitness = _cal_accuracy(res, self.label, self.data_size, i)
+        # calculate accuracy or loss
+        if self.metric == 'accuracy':
+            for i in range(len(pop_batch)):
+                pop_batch[i].fitness = _cal_accuracy(res, self.label, self.data_size, i)
+        else:
+            for i in range(len(pop_batch)):
+                pop_batch[i].fitness = _cal_neg_bce_loss(res, self.data_size, i)
 
     def infer_program_and_get_feature_vector(self, population: List[Program]) -> np.ndarray:
         """Infer a population. The result is stored"""

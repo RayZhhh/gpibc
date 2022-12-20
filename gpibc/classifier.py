@@ -29,7 +29,7 @@ class BinaryClassifier:
             tournament_size  : tournament size while performing tournament selection
             crossover_prob   : crossover probability
             mutation_prob    : mutation probability
-            metric           : the metric to evaluate the program, using accuracy or bce loss
+            metric           : the metric to evaluate the program, using accuracy or neg_bce loss (numba_cuda only now)
             device           : the cuda_device on which executes fitness evaluation
             cu_arch          : cuda arch used in: nvcc -o -arch=compute_75
             cu_code          : cuda code used in: nvcc -o -code=sm_75
@@ -96,14 +96,23 @@ class BinaryClassifier:
         """
         eval_batch_ = self.eval_batch if is_for_train else 1
 
+        # the evaluator for test calculate the accuracy
+        if not is_for_train:
+            metric_ = 'accuracy'
+        else:
+            metric_ = self.metric
+
         if self.device == 'numba_cuda':
             from .eval_numba_cuda import NumbaCudaEvaluator
-            return NumbaCudaEvaluator(data, label, eval_batch_, self.thread_per_block, metric=self.metric)
+            return NumbaCudaEvaluator(data, label, eval_batch_, self.thread_per_block, metric=metric_)
+
         elif self.device == 'cpu':
             return CPUEvaluator(data, label)
+
         elif self.device == 'py_cuda':
             from .eval_pycuda import PyCudaEvaluator
-            return PyCudaEvaluator(data, label, eval_batch_, self.thread_per_block, self.cu_arch, self.cu_code)
+            return PyCudaEvaluator(data, label, eval_batch_, self.thread_per_block, metric_, self.cu_arch, self.cu_code)
+
         else:  # 'cupy'
             from .eval_cupy import CuPyEvaluator
             return CuPyEvaluator(data, label, eval_batch_, self.thread_per_block)
@@ -242,13 +251,13 @@ class BinaryClassifier:
 # Combine Binary Classifier with Instance Selection Approach.
 # Instance Selection (IS) aims to split a whole dataset in to small subsets and train them.
 # IS can reduce the computational complexity to speed up GP based image classification.
-# Compared with normal GPU classifier, classify larger tasks will see obvious improvements.
+# Compared with normal GPU classifier, larger classification tasks will see obvious improvements.
 class BinaryClassifierWithInstanceSelection(BinaryClassifier):
     """
     Combine Binary Classifier with Instance Selection Approach.
     Instance Selection (IS) aims to split a whole dataset in to small subsets and train them.
     IS can reduce the computational complexity to speed up GP based image classification.
-    Compared with normal GPU classifier, classify larger tasks will see obvious improvements.
+    Compared with normal GPU classifier, larger classification tasks will see obvious improvements.
     """
     def __init__(self, train_set: np.ndarray, train_label: np.ndarray, test_set=None, test_label=None,
                  population_size=500, init_method='ramped_half_and_half', init_depth=(3, 6), max_program_depth=8,

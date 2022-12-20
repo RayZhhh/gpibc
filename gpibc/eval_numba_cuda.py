@@ -690,6 +690,8 @@ def infer_population(name, rx, ry, rh, rw, plen, img_h, img_w, data_size, datase
     if top != 1:
         print('error: top != 1')
 
+    cuda.syncthreads()
+
 
 @cuda.jit()
 def infer_population_neg_bce(name, rx, ry, rh, rw, plen, img_h, img_w, data_size, dataset, stack, conv_buffer,
@@ -795,6 +797,7 @@ def infer_population_neg_bce(name, rx, ry, rh, rw, plen, img_h, img_w, data_size
             print('Error: Do not support the function.')
 
     _neg_binary_cross_entropy_loss(std_res, data_size, label)
+    cuda.syncthreads()
 
 
 @numba.jit(nopython=True)

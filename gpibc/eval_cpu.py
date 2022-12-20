@@ -54,7 +54,7 @@ def _g_std(region: ndarray) -> float:
 def _hist_eq(region: ndarray):
     """Histogram Equalization"""
     buffer = np.zeros(shape=(len(region), len(region[0])), dtype=float)
-    hist_buffer = [0] * (MAX_PIXEL_VALUE + 1)
+    hist_buffer = np.zeros(shape=MAX_PIXEL_VALUE + 1, dtype=float)
     pixel_num = len(region) * len(region[0])
 
     for i in range(len(region)):
